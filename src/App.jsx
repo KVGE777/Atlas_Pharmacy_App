@@ -53,7 +53,10 @@ export default function App() {
   }, [activePage, posSubTab]);
 
   useEffect(() => {
-    const handleViewportChange = () => setIsMobileViewport(window.innerWidth < 768);
+    const handleViewportChange = () => {
+      setIsMobileViewport(window.innerWidth < 768);
+      if (window.innerWidth >= 1024) setMobileMenuOpen(false);
+    };
     window.addEventListener('resize', handleViewportChange);
     return () => window.removeEventListener('resize', handleViewportChange);
   }, []);
@@ -1269,6 +1272,7 @@ export default function App() {
         @media (prefers-reduced-motion: reduce) {
           .doodle-float,
           .doodle-float-slow,
+          .doodle-pulse,
           .doodle-pestle-rock,
           .doodle-slosh,
           .doodle-bubble-up,
@@ -1583,7 +1587,7 @@ export default function App() {
           )}
 
           {/* PAGE CONTAINER WITH BREATHABLE PADDING */}
-          <main className="flex-1 max-w-[1480px] 2xl:max-w-[1760px] w-full mx-auto px-4 sm:px-8 py-7 pb-24 md:pb-7">
+          <main className={`flex-1 max-w-[1480px] 2xl:max-w-[1760px] w-full mx-auto px-4 sm:px-8 py-7 ${activePage === 'pos' && posSubTab === 'terminal' && cart.length > 0 ? 'pb-44' : 'pb-24'} md:pb-7`}>
             {/* =================================================================
                 PAGE 1: HOME PAGE (STATISTICS, WARNINGS, REMINDERS & HOTKEYS)
                ================================================================= */}
@@ -2895,7 +2899,7 @@ export default function App() {
                       }`}
                     >
                       <div className="hidden max-md:flex items-center justify-between p-4 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121216]">
-                        <span className="font-display font-bold text-sm">Active Dispensing Tray</span>
+                        <span className="font-display font-bold text-sm">Checkout</span>
                         <button
                           onClick={() => setIsMobileCartOpen(false)}
                           className="p-2 rounded-xl border border-slate-200 dark:border-zinc-700"
@@ -3703,7 +3707,7 @@ export default function App() {
             )}
           </main>
 
-          {activePage === 'pos' && cart.length > 0 && (
+          {activePage === 'pos' && posSubTab === 'terminal' && cart.length > 0 && (
             <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] inset-x-4 z-40 md:hidden rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121216] px-4 py-3 shadow-xl flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="font-display font-bold text-xs text-slate-900 dark:text-white">
