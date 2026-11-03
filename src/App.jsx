@@ -19,16 +19,6 @@ import {
 import { calculateInventoryMetrics, updateStock, quarantineExpiredStock } from './services/inventoryDatabase';
 export default function App() {
   useEffect(() => {
-    const linkId = 'pharmacore-google-fonts-v2';
-    if (!document.getElementById(linkId)) {
-      const link = document.createElement('link');
-      link.id = linkId;
-      link.rel = 'stylesheet';
-      link.href =
-        'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,600&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap';
-      document.head.appendChild(link);
-    }
-
     // Load SheetJS (xlsx) so binary .xlsx and .xls Excel files parse natively in the browser
     const xlsxScriptId = 'pharmacore-sheetjs-cdn';
     if (!document.getElementById(xlsxScriptId)) {
@@ -48,10 +38,41 @@ export default function App() {
   // Collapsible vertical sidebar & multi-page navigation state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const showSidebarLabels = !isSidebarCollapsed || mobileMenuOpen;
   const [activePage, setActivePage] = useState('home'); // 'home' | 'inventory' | 'pos' | 'suppliers' | 'safety' | 'codebase' | 'settings'
   const [selectedCodeFileIdx, setSelectedCodeFileIdx] = useState(0);
   const [posSubTab, setPosSubTab] = useState('terminal'); // 'terminal' | 'invoices'
   const [catalogViewMode, setCatalogViewMode] = useState('grid');
+  const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768);
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
+
+  useEffect(() => {
+    if (activePage !== 'pos' || posSubTab !== 'terminal') {
+      setIsMobileCartOpen(false);
+    }
+  }, [activePage, posSubTab]);
+
+  useEffect(() => {
+    const handleViewportChange = () => setIsMobileViewport(window.innerWidth < 768);
+    window.addEventListener('resize', handleViewportChange);
+    return () => window.removeEventListener('resize', handleViewportChange);
+  }, []);
+
+  useEffect(() => {
+    const tabletLandscapeQuery = window.matchMedia('(min-width: 1024px) and (max-width: 1279px)');
+    const handleTabletLandscapeChange = (event) => {
+      if (event.matches) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+
+    if (tabletLandscapeQuery.matches) {
+      setIsSidebarCollapsed(true);
+    }
+
+    tabletLandscapeQuery.addEventListener('change', handleTabletLandscapeChange);
+    return () => tabletLandscapeQuery.removeEventListener('change', handleTabletLandscapeChange);
+  }, []);
 
   const handleDownloadCodeFile = useCallback((fileObj) => {
     const filename = fileObj.path.split('/').pop() || 'module.js';
@@ -910,6 +931,7 @@ export default function App() {
     setPrescriberNote('');
     setPatientName('');
     setDiscountPercent(0);
+    setIsMobileCartOpen(false);
     showToast(`Dispensed & logged invoice ${newReceipt.id}`, 'success');
   };
 
@@ -1244,9 +1266,23 @@ export default function App() {
         .doodle-puff { animation: doodlePuff 2.6s ease-in-out infinite; }
         .doodle-bell-ring { animation: doodleBellRing 3.5s ease-in-out infinite; transform-origin: 32px 16px; }
         .doodle-ecg-line { stroke-dasharray: 240; animation: doodleEcgFlow 7s linear infinite; }
+        @media (prefers-reduced-motion: reduce) {
+          .doodle-float,
+          .doodle-float-slow,
+          .doodle-pestle-rock,
+          .doodle-slosh,
+          .doodle-bubble-up,
+          .doodle-twinkle,
+          .doodle-drip,
+          .doodle-puff,
+          .doodle-bell-ring,
+          .doodle-ecg-line {
+            animation: none !important;
+          }
+        }
       `}</style>
 
-      <div className="min-h-screen flex font-sans-ui bg-[#FAF9F5] text-slate-900 dark:bg-[#09090B] dark:text-slate-100 antialiased selection:bg-slate-900 selection:text-white dark:selection:bg-white dark:selection:text-slate-950 transition-colors duration-200">
+      <div className="min-h-dvh flex font-sans-ui bg-[#FAF9F5] text-slate-900 dark:bg-[#09090B] dark:text-slate-100 antialiased selection:bg-slate-900 selection:text-white dark:selection:bg-white dark:selection:text-slate-950 transition-colors duration-200">
         {/* Mobile Sidebar Backdrop */}
         {mobileMenuOpen && (
           <div
@@ -1257,8 +1293,8 @@ export default function App() {
 
         {/* COLLAPSIBLE VERTICAL SIDEBAR */}
         <aside
-          className={`fixed lg:sticky top-0 left-0 z-50 h-screen shrink-0 flex flex-col justify-between border-r border-slate-200/90 dark:border-zinc-800/90 bg-white dark:bg-[#121216] transition-all duration-300 ease-in-out ${
-            isSidebarCollapsed ? 'w-[84px]' : 'w-[276px]'
+          className={`fixed lg:sticky top-0 left-0 z-50 h-dvh shrink-0 flex flex-col justify-between border-r border-slate-200/90 dark:border-zinc-800/90 bg-white dark:bg-[#121216] transition-all duration-300 ease-in-out ${
+            isSidebarCollapsed ? 'lg:w-[84px] w-[276px]' : 'w-[276px]'
           } ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
         >
           {/* Top Brand & Collapse Toggle */}
@@ -1267,7 +1303,7 @@ export default function App() {
               <button
                 onClick={() => setActivePage('home')}
                 className={`flex items-center gap-3 text-left overflow-hidden ${
-                  isSidebarCollapsed ? 'justify-center w-full' : ''
+                  showSidebarLabels ? '' : 'justify-center w-full'
                 }`}
                 title="PharmaCore Home"
               >
@@ -1276,7 +1312,7 @@ export default function App() {
                 >
                   <span className="font-serif-editorial italic font-bold text-2xl leading-none pr-0.5">Rx</span>
                 </div>
-                {!isSidebarCollapsed && (
+                {showSidebarLabels && (
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="font-display font-extrabold tracking-tight text-lg text-slate-900 dark:text-white truncate">
@@ -1290,7 +1326,7 @@ export default function App() {
                 )}
               </button>
 
-              {!isSidebarCollapsed && (
+              {showSidebarLabels && (
                 <button
                   onClick={() => setIsSidebarCollapsed(true)}
                   className="hidden lg:flex p-2 rounded-xl text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-zinc-800/80 transition-colors"
@@ -1315,7 +1351,7 @@ export default function App() {
 
             {/* Vertical Navigation Links */}
             <div className="p-3 space-y-1.5">
-              {!isSidebarCollapsed && (
+              {showSidebarLabels && (
                 <div className="px-3 py-1.5 text-[10px] font-display font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500">
                   Apothecary Workspace
                 </div>
@@ -1330,9 +1366,9 @@ export default function App() {
                       setActivePage(item.id);
                       setMobileMenuOpen(false);
                     }}
-                    title={isSidebarCollapsed ? `${item.label} — ${item.subtitle}` : undefined}
+                    title={showSidebarLabels ? undefined : `${item.label} — ${item.subtitle}`}
                     className={`w-full flex items-center gap-3 px-3.5 py-3 rounded-2xl text-left transition-all duration-150 group ${
-                      isSidebarCollapsed ? 'justify-center' : 'justify-between'
+                      showSidebarLabels ? 'justify-between' : 'justify-center'
                     } ${
                       isActive
                         ? `${theme.btnClass} shadow-xs`
@@ -1341,7 +1377,7 @@ export default function App() {
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <Icon className="w-5 h-5 shrink-0" />
-                      {!isSidebarCollapsed && (
+                      {showSidebarLabels && (
                         <div className="min-w-0">
                           <div className="font-display font-bold text-sm leading-tight truncate">
                             {item.label}
@@ -1359,7 +1395,7 @@ export default function App() {
                       )}
                     </div>
 
-                    {!isSidebarCollapsed && (
+                    {showSidebarLabels && (
                       <div className="flex items-center gap-1.5 shrink-0">
                         {item.badge !== null && (
                           <span
@@ -1382,7 +1418,7 @@ export default function App() {
 
           {/* Sidebar Footer: Theme Palette, Dark Mode & Quick Receive */}
           <div className="p-3 border-t border-slate-200/80 dark:border-zinc-800/80 space-y-3 bg-slate-50/50 dark:bg-zinc-900/30">
-            {!isSidebarCollapsed ? (
+            {showSidebarLabels ? (
               <>
                 <div className="px-2 space-y-2">
                   <div className="flex items-center justify-between text-[11px] font-display font-bold text-slate-500 dark:text-zinc-400">
@@ -1498,7 +1534,7 @@ export default function App() {
               >
                 <Search className="w-3.5 h-3.5" />
                 <span>Quick Drug Lookup...</span>
-                <kbd className="px-1.5 py-0.5 text-[10px] font-mono-code bg-white dark:bg-zinc-800 rounded border border-slate-200 dark:border-zinc-700">
+                <kbd className="hidden lg:inline-flex px-1.5 py-0.5 text-[10px] font-mono-code bg-white dark:bg-zinc-800 rounded border border-slate-200 dark:border-zinc-700">
                   /
                 </kbd>
               </button>
@@ -1537,7 +1573,7 @@ export default function App() {
           </header>
 
           {toast && (
-            <div className="fixed bottom-6 right-6 z-50 max-w-md bg-slate-900 text-white dark:bg-white dark:text-slate-950 px-4 py-3.5 rounded-2xl shadow-xl border border-slate-700 dark:border-slate-200 flex items-center gap-3 text-xs font-semibold">
+            <div className="fixed bottom-20 inset-x-4 sm:inset-x-auto sm:right-6 sm:bottom-6 z-50 sm:max-w-md bg-slate-900 text-white dark:bg-white dark:text-slate-950 px-4 py-3.5 rounded-2xl shadow-xl border border-slate-700 dark:border-slate-200 flex items-center gap-3 text-xs font-semibold">
               <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${theme.barClass}`} />
               <span className="flex-1 leading-snug">{toast.message}</span>
               <button onClick={() => setToast(null)} className="opacity-60 hover:opacity-100 p-0.5">
@@ -1547,7 +1583,7 @@ export default function App() {
           )}
 
           {/* PAGE CONTAINER WITH BREATHABLE PADDING */}
-          <main className="flex-1 max-w-[1480px] w-full mx-auto px-4 sm:px-8 py-7">
+          <main className="flex-1 max-w-[1480px] 2xl:max-w-[1760px] w-full mx-auto px-4 sm:px-8 py-7 pb-24 md:pb-7">
             {/* =================================================================
                 PAGE 1: HOME PAGE (STATISTICS, WARNINGS, REMINDERS & HOTKEYS)
                ================================================================= */}
@@ -1752,7 +1788,7 @@ export default function App() {
                       >
                         <div className="flex items-center justify-between w-full">
                           <kbd
-                            className={`px-2 py-0.5 rounded-lg text-[11px] font-mono-code font-bold border ${theme.badgeClass}`}
+                            className={`hidden lg:inline-flex px-2 py-0.5 rounded-lg text-[11px] font-mono-code font-bold border ${theme.badgeClass}`}
                           >
                             {hk.key}
                           </kbd>
@@ -1773,9 +1809,9 @@ export default function App() {
 
                 {}
                 {/* Warnings & Pharmacist Shift Reminders Split */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
                   {/* Left: Urgent Clinical Warnings */}
-                  <div className="lg:col-span-7 bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs">
+                  <div className="xl:col-span-7 bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs">
                     <div className="p-5 sm:px-6 border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <AlertTriangle className={`w-5 h-5 ${theme.textClass}`} />
@@ -1796,7 +1832,7 @@ export default function App() {
                       </button>
                     </div>
 
-                    <div className="divide-y divide-slate-200/70 dark:divide-zinc-800/80 max-h-[420px] overflow-y-auto">
+                    <div className="divide-y divide-slate-200/70 dark:divide-zinc-800/80 max-h-[60dvh] md:max-h-[420px] overflow-y-auto">
                       {catalog
                         .filter((i) => i.daysUntilExpiry <= 35 || i.stockQty === 0)
                         .slice(0, 10)
@@ -1871,7 +1907,7 @@ export default function App() {
                   </div>
 
                   {/* Right: Pharmacist Shift Reminders & Checklist */}
-                  <div className="lg:col-span-5 bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs flex flex-col">
+                  <div className="xl:col-span-5 bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs flex flex-col">
                     <div className="p-5 sm:px-6 border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <Bell className={`w-5 h-5 ${theme.textClass}`} />
@@ -1898,12 +1934,12 @@ export default function App() {
                         value={newReminderText}
                         onChange={(e) => setNewReminderText(e.target.value)}
                         placeholder="Add shift reminder or patient callback note..."
-                        className="flex-1 px-3.5 py-2 text-xs font-medium bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl focus:outline-none"
+                        className="flex-1 px-3.5 py-2 text-base sm:text-sm font-medium bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl focus:outline-none"
                       />
                       <select
                         value={newReminderPriority}
                         onChange={(e) => setNewReminderPriority(e.target.value)}
-                        className="px-2.5 py-2 text-xs font-semibold bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl"
+                        className="px-2.5 py-2 text-base sm:text-sm font-semibold bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl"
                       >
                         <option value="Normal">Normal</option>
                         <option value="High">Urgent</option>
@@ -1916,7 +1952,7 @@ export default function App() {
                       </button>
                     </form>
 
-                    <div className="divide-y divide-slate-200/70 dark:divide-zinc-800/80 max-h-[340px] overflow-y-auto">
+                    <div className="divide-y divide-slate-200/70 dark:divide-zinc-800/80 max-h-[60dvh] md:max-h-[340px] overflow-y-auto">
                       {reminders.map((rem) => (
                         <div
                           key={rem.id}
@@ -1933,7 +1969,7 @@ export default function App() {
                                   prev.map((r) => (r.id === rem.id ? { ...r, done: !r.done } : r))
                                 )
                               }
-                              className="w-4 h-4 mt-0.5 rounded accent-slate-900 dark:accent-white"
+                              className="w-4 h-4 text-base sm:text-sm mt-0.5 rounded accent-slate-900 dark:accent-white"
                             />
                             <div className="space-y-1">
                               <div
@@ -1957,7 +1993,7 @@ export default function App() {
                           </label>
                           <button
                             onClick={() => setReminders((prev) => prev.filter((r) => r.id !== rem.id))}
-                            className="p-1 text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                            className="p-1 min-h-10 min-w-10 md:min-h-0 md:min-w-0 inline-flex items-center justify-center text-slate-400 hover:text-slate-900 dark:hover:text-white"
                             title="Delete Reminder"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -1978,7 +2014,7 @@ export default function App() {
                 <div className="bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl p-6 shadow-2xs space-y-5">
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                     <div>
-                      <div className="flex items-center gap-3">
+                      <div className="sticky top-0 flex items-center gap-3 bg-white dark:bg-[#121216]">
                         <h2 className="font-display text-xl font-extrabold tracking-tight text-slate-900 dark:text-white">
                           Apothecary Stock &amp; Variant Manager
                         </h2>
@@ -2032,7 +2068,7 @@ export default function App() {
                         </button>
                         <button
                           onClick={() => setCatalogViewMode('table')}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-display font-bold transition-all ${
+                          className={`hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-display font-bold transition-all ${
                             catalogViewMode === 'table'
                               ? `${theme.btnClass} shadow-2xs`
                               : 'text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-white'
@@ -2071,7 +2107,7 @@ export default function App() {
                         value={invSearch}
                         onChange={(e) => setInvSearch(e.target.value)}
                         placeholder="Search SKU (#141, P0000012), drug name, supplier (SANTUS, GJ)..."
-                        className={`w-full pl-10 pr-8 py-2.5 text-xs font-medium bg-slate-50/80 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl focus:outline-none ${theme.ringClass}`}
+                        className={`w-full pl-10 pr-8 py-2.5 text-base sm:text-sm font-medium bg-slate-50/80 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl focus:outline-none ${theme.ringClass}`}
                       />
                       {invSearch && (
                         <button
@@ -2086,7 +2122,7 @@ export default function App() {
                     <select
                       value={categoryFilter}
                       onChange={(e) => setCategoryFilter(e.target.value)}
-                      className="px-3 py-2.5 text-xs font-semibold bg-slate-50/80 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl"
+                      className="px-3 py-2.5 text-base sm:text-sm font-semibold bg-slate-50/80 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl"
                     >
                       {categories.map((c) => (
                         <option key={c} value={c}>
@@ -2098,7 +2134,7 @@ export default function App() {
                     <select
                       value={supplierFilter}
                       onChange={(e) => setSupplierFilter(e.target.value)}
-                      className="px-3 py-2.5 text-xs font-semibold bg-slate-50/80 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl"
+                      className="px-3 py-2.5 text-base sm:text-sm font-semibold bg-slate-50/80 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl"
                     >
                       {suppliersList.map((s) => (
                         <option key={s} value={s}>
@@ -2110,7 +2146,7 @@ export default function App() {
                     <select
                       value={formFilter}
                       onChange={(e) => setFormFilter(e.target.value)}
-                      className="px-3 py-2.5 text-xs font-semibold bg-slate-50/80 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl"
+                      className="px-3 py-2.5 text-base sm:text-sm font-semibold bg-slate-50/80 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl"
                     >
                       {dosageForms.map((f) => (
                         <option key={f} value={f}>
@@ -2122,7 +2158,7 @@ export default function App() {
                     <select
                       value={statusFilter}
                       onChange={(e) => setStatusFilter(e.target.value)}
-                      className="px-3 py-2.5 text-xs font-semibold bg-slate-50/80 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl"
+                      className="px-3 py-2.5 text-base sm:text-sm font-semibold bg-slate-50/80 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl"
                     >
                       <option value="ALL">Status: All Items ({kpiStats.totalSkus})</option>
                       <option value="IN_STOCK">In Stock ({kpiStats.totalSkus - kpiStats.outOfStockCount})</option>
@@ -2152,8 +2188,8 @@ export default function App() {
                 </div>
 
                 {}
-                {catalogViewMode === 'grid' ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+                {catalogViewMode === 'grid' || isMobileViewport ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
                     {paginatedInventory.map((item) => {
                       const isLow = item.stockQty > 0 && item.stockQty <= item.reorderLevel;
                       const isOut = item.stockQty === 0;
@@ -2174,15 +2210,15 @@ export default function App() {
                                 <DosageFormIcon form={item.dosageForm} className="w-7 h-7" />
                               </div>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[11px] font-mono-code font-semibold px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
+                                <span className="text-xs font-mono-code font-semibold px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-zinc-400">
                                   {item.shelfLocation}
                                 </span>
                                 {item.rxRequired ? (
-                                  <span className="text-[10px] font-mono-code font-bold px-2 py-0.5 rounded-lg border border-slate-900 dark:border-zinc-200">
+                                  <span className="text-xs font-mono-code font-bold px-2 py-0.5 rounded-lg border border-slate-900 dark:border-zinc-200">
                                     Rx
                                   </span>
                                 ) : (
-                                  <span className="text-[10px] font-mono-code font-medium px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-500">
+                                  <span className="text-xs font-mono-code font-medium px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-zinc-800 text-slate-500">
                                     OTC
                                   </span>
                                 )}
@@ -2225,7 +2261,7 @@ export default function App() {
                               <div className="flex items-center gap-1.5 font-mono-code">
                                 <button
                                   onClick={() => adjustStock(item.id, -1)}
-                                  className="w-5 h-5 rounded-md border border-slate-200 dark:border-zinc-700 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800"
+                                  className="w-5 h-5 min-h-10 min-w-10 md:min-h-0 md:min-w-0 rounded-md border border-slate-200 dark:border-zinc-700 inline-flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800"
                                 >
                                   -
                                 </button>
@@ -2234,7 +2270,7 @@ export default function App() {
                                 </span>
                                 <button
                                   onClick={() => adjustStock(item.id, 10)}
-                                  className="px-1.5 h-5 rounded-md border border-slate-200 dark:border-zinc-700 text-[10px] hover:bg-slate-100 dark:hover:bg-zinc-800"
+                                  className="px-1.5 h-5 min-h-10 min-w-10 md:min-h-0 md:min-w-0 rounded-md border border-slate-200 dark:border-zinc-700 text-xs inline-flex items-center justify-center hover:bg-slate-100 dark:hover:bg-zinc-800"
                                 >
                                   +10
                                 </button>
@@ -2250,7 +2286,7 @@ export default function App() {
                               />
                             </div>
 
-                            <div className="flex items-center justify-between text-[11px] font-mono-code text-slate-400 dark:text-zinc-500 pt-0.5">
+                            <div className="flex items-center justify-between text-xs font-mono-code text-slate-400 dark:text-zinc-500 pt-0.5">
                               <span>{item.sku}</span>
                               <span
                                 className={
@@ -2267,7 +2303,7 @@ export default function App() {
                               <div className="font-serif-editorial text-xl font-bold text-slate-900 dark:text-white">
                                 {formatNaira(item.sellingPrice)}
                               </div>
-                              <div className="text-[10px] font-mono-code text-slate-400">
+                              <div className="text-xs font-mono-code text-slate-400">
                                 Cost {formatNaira(item.costPrice)}
                               </div>
                             </div>
@@ -2285,14 +2321,14 @@ export default function App() {
                                   setIsAddingNew(false);
                                   setEditingDrug(item);
                                 }}
-                                className="p-2 rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:border-zinc-200 text-slate-600 dark:text-zinc-300"
+                                className="p-2 min-h-10 min-w-10 md:min-h-0 md:min-w-0 inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:border-zinc-200 text-slate-600 dark:text-zinc-300"
                                 title="Edit Medication SKU"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => setDrugToDelete(item)}
-                                className="p-2 rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:border-zinc-200 text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                                className="p-2 min-h-10 min-w-10 md:min-h-0 md:min-w-0 inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:border-zinc-200 text-slate-500 hover:text-slate-900 dark:hover:text-white"
                                 title="Delete Medication SKU"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -2320,7 +2356,7 @@ export default function App() {
                 ) : (
                   <div className="bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs">
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
+                      <table className="w-full min-w-[860px] text-left border-collapse">
                         <thead>
                           <tr className="border-b border-slate-200/80 dark:border-zinc-800 text-[11px] font-display font-bold uppercase tracking-wider text-slate-400 dark:text-zinc-500 bg-slate-50/70 dark:bg-zinc-900/50">
                             <th className="py-3.5 px-4 w-8">
@@ -2337,7 +2373,7 @@ export default function App() {
                                     setSelectedDrugIds([]);
                                   }
                                 }}
-                                className="w-3.5 h-3.5 rounded"
+                                className="w-3.5 h-3.5 text-base sm:text-sm rounded"
                               />
                             </th>
                             <th className="py-3.5 px-4">SKU &amp; Bay</th>
@@ -2404,7 +2440,7 @@ export default function App() {
                                         setSelectedDrugIds((prev) => prev.filter((id) => id !== item.id));
                                       }
                                     }}
-                                    className="w-3.5 h-3.5 rounded"
+                                    className="w-3.5 h-3.5 text-base sm:text-sm rounded"
                                   />
                                 </td>
                                 <td className="py-3.5 px-4 whitespace-nowrap">
@@ -2509,14 +2545,14 @@ export default function App() {
                                         setIsAddingNew(false);
                                         setEditingDrug(item);
                                       }}
-                                      className="p-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:border-zinc-200"
+                                      className="p-1.5 min-h-10 min-w-10 md:min-h-0 md:min-w-0 inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:border-zinc-200"
                                       title="Edit"
                                     >
                                       <Edit3 className="w-3.5 h-3.5" />
                                     </button>
                                     <button
                                       onClick={() => setDrugToDelete(item)}
-                                      className="p-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:border-zinc-200 text-slate-500 hover:text-slate-900 dark:hover:text-white"
+                                      className="p-1.5 min-h-10 min-w-10 md:min-h-0 md:min-w-0 inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:text-white"
                                       title="Delete"
                                     >
                                       <Trash2 className="w-3.5 h-3.5" />
@@ -2547,7 +2583,7 @@ export default function App() {
                 )}
 
                 {/* Pagination Bar */}
-                <div className="bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-medium shadow-2xs">
+                <div className="bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl px-5 py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap text-xs font-medium shadow-2xs">
                   <div className="flex items-center gap-3 text-slate-500 dark:text-zinc-400">
                     <span>
                       Showing{' '}
@@ -2564,7 +2600,7 @@ export default function App() {
                     <select
                       value={pageSize}
                       onChange={(e) => setPageSize(Number(e.target.value))}
-                      className="px-2.5 py-1 border border-slate-200 dark:border-zinc-700 rounded-xl bg-slate-50 dark:bg-zinc-900 font-semibold"
+                      className="px-2.5 py-1 text-base sm:text-sm border border-slate-200 dark:border-zinc-700 rounded-xl bg-slate-50 dark:bg-zinc-900 font-semibold"
                     >
                       <option value={12}>12 / page</option>
                       <option value={16}>16 / page</option>
@@ -2577,7 +2613,7 @@ export default function App() {
                     <button
                       disabled={currentPage <= 1}
                       onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                      className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 disabled:opacity-40 flex items-center gap-1 font-display font-bold hover:bg-slate-50 dark:hover:bg-zinc-800"
+                      className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 disabled:opacity-40 flex items-center gap-1 font-display font-bold hover:bg-slate-50 dark:hover:bg-zinc-800 min-h-10 md:min-h-0"
                     >
                       <ChevronLeft className="w-3.5 h-3.5" />
                       <span>Previous</span>
@@ -2588,7 +2624,7 @@ export default function App() {
                     <button
                       disabled={currentPage >= totalPages}
                       onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                      className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 disabled:opacity-40 flex items-center gap-1 font-display font-bold hover:bg-slate-50 dark:hover:bg-zinc-800"
+                      className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 disabled:opacity-40 flex items-center gap-1 font-display font-bold hover:bg-slate-50 dark:hover:bg-zinc-800 min-h-10 md:min-h-0"
                     >
                       <span>Next</span>
                       <ChevronRight className="w-3.5 h-3.5" />
@@ -2648,8 +2684,8 @@ export default function App() {
                 </div>
 
                 {posSubTab === 'terminal' ? (
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                    <div className="lg:col-span-7 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                    <div className="md:col-span-7 lg:col-span-8 space-y-4">
                       <div className="bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl p-5 shadow-2xs space-y-4">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div>
@@ -2695,7 +2731,7 @@ export default function App() {
                             value={posSearch}
                             onChange={(e) => setPosSearch(e.target.value)}
                             placeholder="Type molecule + strength + form (e.g., 'amox 500 cap 100' or 'cipro 500')..."
-                            className={`w-full pl-11 pr-24 py-3.5 text-sm font-medium bg-slate-50/70 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 rounded-2xl focus:outline-none focus:bg-white dark:focus:bg-zinc-900 transition-all ${theme.ringClass}`}
+                            className={`w-full pl-11 pr-24 py-3.5 text-base sm:text-sm font-medium bg-slate-50/70 dark:bg-zinc-900/70 border border-slate-200 dark:border-zinc-800 rounded-2xl focus:outline-none focus:bg-white dark:focus:bg-zinc-900 transition-all ${theme.ringClass}`}
                           />
                           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
                             {posSearch ? (
@@ -2745,7 +2781,7 @@ export default function App() {
                           </span>
                         </div>
 
-                        <div className="divide-y divide-slate-200/70 dark:divide-zinc-800/80 max-h-[600px] overflow-y-auto">
+                        <div className="divide-y divide-slate-200/70 dark:divide-zinc-800/80 max-h-[60dvh] md:max-h-[600px] overflow-y-auto">
                           {posResults.map((drug) => {
                             const isOut = drug.stockQty <= 0;
                             const isExpired = drug.daysUntilExpiry <= 0;
@@ -2851,7 +2887,23 @@ export default function App() {
                     </div>
 
                     {/* Right Column: Active Dispensing Tray */}
-                    <div className="lg:col-span-5 bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl shadow-xs flex flex-col sticky top-24 overflow-hidden">
+                    <div
+                      className={`md:col-span-5 lg:col-span-4 bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl shadow-xs flex-col md:sticky md:top-24 md:max-h-[calc(100dvh-7rem)] overflow-hidden ${
+                        isMobileCartOpen
+                          ? 'flex max-md:fixed max-md:inset-0 max-md:z-50 max-md:rounded-none max-md:max-h-none'
+                          : 'hidden md:flex'
+                      }`}
+                    >
+                      <div className="hidden max-md:flex items-center justify-between p-4 border-b border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121216]">
+                        <span className="font-display font-bold text-sm">Active Dispensing Tray</span>
+                        <button
+                          onClick={() => setIsMobileCartOpen(false)}
+                          className="p-2 rounded-xl border border-slate-200 dark:border-zinc-700"
+                          aria-label="Close cart"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
                       <div className="p-5 border-b border-slate-200/80 dark:border-zinc-800/80 flex items-center justify-between bg-slate-50/40 dark:bg-zinc-900/30">
                         <div className="flex items-center gap-3">
                           <div className={`w-10 h-10 rounded-2xl flex items-center justify-center border ${theme.badgeClass}`}>
@@ -2878,7 +2930,7 @@ export default function App() {
                         )}
                       </div>
 
-                      <div className="divide-y divide-slate-200/70 dark:divide-zinc-800/80 max-h-[360px] overflow-y-auto">
+                      <div className="divide-y divide-slate-200/70 dark:divide-zinc-800/80 min-h-0 flex-1 max-h-[60dvh] md:max-h-[360px] overflow-y-auto">
                         {cart.length === 0 ? (
                           <EmptyPosCounterIllustration theme={theme} />
                         ) : (
@@ -2910,7 +2962,7 @@ export default function App() {
                                   <div className="font-serif-editorial font-bold text-base text-slate-900 dark:text-white">
                                     {formatNaira(line.unitPrice * line.qty)}
                                   </div>
-                                  <div className="text-[11px] font-mono-code text-slate-400">
+                                  <div className="text-xs font-mono-code text-slate-400">
                                     {formatNaira(line.unitPrice)} / ea
                                   </div>
                                 </div>
@@ -2931,7 +2983,7 @@ export default function App() {
                                 <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-900 p-1 rounded-xl border border-slate-200/80 dark:border-zinc-800">
                                   <button
                                     onClick={() => updateCartQty(line.lineKey, -1)}
-                                    className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-800 flex items-center justify-center"
+                                    className="w-6 h-6 min-h-10 min-w-10 md:min-h-0 md:min-w-0 rounded-lg bg-white dark:bg-zinc-800 inline-flex items-center justify-center"
                                   >
                                     <Minus className="w-3 h-3" />
                                   </button>
@@ -2940,7 +2992,7 @@ export default function App() {
                                   </span>
                                   <button
                                     onClick={() => updateCartQty(line.lineKey, 1)}
-                                    className="w-6 h-6 rounded-lg bg-white dark:bg-zinc-800 flex items-center justify-center"
+                                    className="w-6 h-6 min-h-10 min-w-10 md:min-h-0 md:min-w-0 rounded-lg bg-white dark:bg-zinc-800 inline-flex items-center justify-center"
                                   >
                                     <Plus className="w-3 h-3" />
                                   </button>
@@ -2952,7 +3004,7 @@ export default function App() {
                       </div>
 
                       {cart.length > 0 && (
-                        <div className="p-5 border-t border-slate-200/80 dark:border-zinc-800/80 space-y-4 bg-slate-50/60 dark:bg-zinc-900/40">
+                        <div className="p-5 pb-[env(safe-area-inset-bottom)] border-t border-slate-200/80 dark:border-zinc-800/80 space-y-4 bg-slate-50/60 dark:bg-zinc-900/40">
                           {cartSummary.hasRxItems && (
                             <div className="p-3.5 rounded-2xl border border-slate-900/80 dark:border-zinc-200/80 bg-white dark:bg-zinc-900 space-y-2">
                               <label className="flex items-center gap-2.5 text-xs font-display font-bold cursor-pointer">
@@ -2960,7 +3012,7 @@ export default function App() {
                                   type="checkbox"
                                   checked={rxVerified}
                                   onChange={(e) => setRxVerified(e.target.checked)}
-                                  className="w-4 h-4 rounded accent-slate-900 dark:accent-white"
+                                  className="w-4 h-4 text-base sm:text-sm rounded accent-slate-900 dark:accent-white"
                                 />
                                 <FileCheck2 className={`w-4 h-4 ${theme.textClass}`} />
                                 <span>Prescription Verified by Pharmacist (Rx Required)</span>
@@ -2970,7 +3022,7 @@ export default function App() {
                                 value={prescriberNote}
                                 onChange={(e) => setPrescriberNote(e.target.value)}
                                 placeholder="Prescriber Name & Rx Ref (e.g., Dr. Bello #RX-409)"
-                                className="w-full px-3 py-2 text-xs font-medium bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl"
+                                className="w-full px-3 py-2 text-base sm:text-sm font-medium bg-slate-50 dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 rounded-xl"
                               />
                             </div>
                           )}
@@ -2986,7 +3038,7 @@ export default function App() {
                                   type="checkbox"
                                   checked={expiryOverrideConfirmed}
                                   onChange={(e) => setExpiryOverrideConfirmed(e.target.checked)}
-                                  className="w-3.5 h-3.5 rounded"
+                                  className="w-3.5 h-3.5 text-base sm:text-sm rounded"
                                 />
                                 <span>Patient counseled on batch expiry date</span>
                               </label>
@@ -3003,7 +3055,7 @@ export default function App() {
                                 value={patientName}
                                 onChange={(e) => setPatientName(e.target.value)}
                                 placeholder="Walk-in Patient"
-                                className="w-full px-3 py-2 text-xs font-medium bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl"
+                                className="w-full px-3 py-2 text-base sm:text-sm font-medium bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl"
                               />
                             </div>
                             <div>
@@ -3018,7 +3070,7 @@ export default function App() {
                                 onChange={(e) =>
                                   setDiscountPercent(Math.min(50, Math.max(0, Number(e.target.value))))
                                 }
-                                className="w-full px-3 py-2 text-xs font-mono-code font-semibold bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl"
+                                className="w-full px-3 py-2 text-base sm:text-sm font-mono-code font-semibold bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-xl"
                               />
                             </div>
                           </div>
@@ -3071,7 +3123,7 @@ export default function App() {
                           value={invoiceSearch}
                           onChange={(e) => setInvoiceSearch(e.target.value)}
                           placeholder="Search invoices by ID, patient, prescriber, or medication..."
-                          className="w-full pl-10 pr-4 py-2.5 text-xs font-medium bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl"
+                          className="w-full pl-10 pr-4 py-2.5 text-base sm:text-sm font-medium bg-slate-50 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 rounded-2xl"
                         />
                       </div>
 
@@ -3432,8 +3484,8 @@ export default function App() {
                 </div>
 
                 {/* IDE Split View: File Tree on Left, Code & Role on Right */}
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                  <div className="lg:col-span-4 bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs">
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+                  <div className="xl:col-span-4 bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs">
                     <div className="p-4 border-b border-slate-200/80 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-900/40 flex items-center justify-between">
                       <span className="text-xs font-display font-bold uppercase tracking-wider text-slate-500">
                         Project Directory Tree
@@ -3474,7 +3526,7 @@ export default function App() {
                   {(() => {
                     const activeFile = ARCHITECTURE_FILES[selectedCodeFileIdx] || ARCHITECTURE_FILES[0];
                     return (
-                      <div className="lg:col-span-8 bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs">
+                      <div className="xl:col-span-8 bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs">
                         <div className="p-5 border-b border-slate-200/80 dark:border-zinc-800 bg-slate-50/60 dark:bg-zinc-900/40 flex flex-wrap items-center justify-between gap-3">
                           <div>
                             <div className="flex items-center gap-2">
@@ -3542,7 +3594,7 @@ export default function App() {
                           type="text"
                           value={pharmacyProfile.name}
                           onChange={(e) => setPharmacyProfile({ ...pharmacyProfile, name: e.target.value })}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent font-medium"
+                          className="w-full px-3.5 py-2.5 text-base sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent font-medium"
                         />
                       </div>
                       <div>
@@ -3553,7 +3605,7 @@ export default function App() {
                           onChange={(e) =>
                             setPharmacyProfile({ ...pharmacyProfile, pharmacistOnDuty: e.target.value })
                           }
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent font-medium"
+                          className="w-full px-3.5 py-2.5 text-base sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent font-medium"
                         />
                       </div>
                       <div>
@@ -3564,7 +3616,7 @@ export default function App() {
                           onChange={(e) =>
                             setPharmacyProfile({ ...pharmacyProfile, licenseNumber: e.target.value })
                           }
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent font-mono-code"
+                          className="w-full px-3.5 py-2.5 text-base sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent font-mono-code"
                         />
                       </div>
                       <div className="sm:col-span-2">
@@ -3573,7 +3625,7 @@ export default function App() {
                           type="text"
                           value={pharmacyProfile.address}
                           onChange={(e) => setPharmacyProfile({ ...pharmacyProfile, address: e.target.value })}
-                          className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent font-medium"
+                          className="w-full px-3.5 py-2.5 text-base sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent font-medium"
                         />
                       </div>
                     </div>
@@ -3650,13 +3702,66 @@ export default function App() {
               </div>
             )}
           </main>
+
+          {activePage === 'pos' && cart.length > 0 && (
+            <div className="fixed bottom-[calc(3.5rem+env(safe-area-inset-bottom))] inset-x-4 z-40 md:hidden rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121216] px-4 py-3 shadow-xl flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-display font-bold text-xs text-slate-900 dark:text-white">
+                  {cart.reduce((total, line) => total + line.qty, 0)} items in tray
+                </div>
+                <div className={`font-serif-editorial font-bold text-lg ${theme.textClass}`}>
+                  {formatNaira(cartSummary.finalTotal)}
+                </div>
+              </div>
+              <button
+                onClick={() => setIsMobileCartOpen(true)}
+                className={`shrink-0 px-4 py-2.5 rounded-2xl text-xs font-display font-bold ${theme.btnClass}`}
+              >
+                View cart
+              </button>
+            </div>
+          )}
+
+          <nav className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-[#121216]/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)]">
+            <div className="grid grid-cols-4">
+              {[
+                { id: 'home', label: 'Home', icon: HomeIcon },
+                { id: 'inventory', label: 'Inventory', icon: Boxes },
+                { id: 'pos', label: 'Sales', icon: ShoppingCart },
+                { id: 'invoices', label: 'Invoices', icon: Receipt }
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isActive = tab.id === 'invoices' ? activePage === 'pos' && posSubTab === 'invoices' : activePage === tab.id && (tab.id !== 'pos' || posSubTab === 'terminal');
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      if (tab.id === 'invoices') {
+                        setActivePage('pos');
+                        setPosSubTab('invoices');
+                      } else {
+                        setActivePage(tab.id);
+                        if (tab.id === 'pos') setPosSubTab('terminal');
+                      }
+                    }}
+                    className={`min-h-[44px] py-2 flex flex-col items-center justify-center gap-0.5 text-[10px] font-display font-bold ${
+                      isActive ? theme.textClass : 'text-slate-500 dark:text-zinc-400'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </nav>
         </div>
 
         {}
         {/* SAFE DELETE MEDICATION CONFIRMATION MODAL */}
         {drugToDelete && (
-          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4">
+            <div className="bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 w-full h-dvh sm:h-auto sm:rounded-3xl rounded-none max-w-md p-6 space-y-4 shadow-2xl overflow-y-auto">
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-2xl bg-slate-900 text-white dark:bg-white dark:text-slate-950 flex items-center justify-center shrink-0">
                   <Trash2 className="w-5 h-5" />
@@ -3683,7 +3788,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2.5 pt-2">
+              <div className="sticky bottom-0 flex items-center justify-end gap-2.5 pt-2 pb-[env(safe-area-inset-bottom)] bg-white dark:bg-[#121216]">
                 <button
                   onClick={() => setDrugToDelete(null)}
                   className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-display font-bold"
@@ -3703,10 +3808,10 @@ export default function App() {
 
         {/* EXCEL (.XLSX / .XLS) & CSV INVENTORY IMPORT STUDIO MODAL */}
         {isImportModalOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 rounded-3xl max-w-6xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4">
+            <div className="bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 w-full h-dvh sm:h-auto sm:rounded-3xl rounded-none max-w-6xl sm:max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
               {/* Modal Header */}
-              <div className="p-5 sm:px-6 border-b border-slate-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-4 bg-slate-50/60 dark:bg-zinc-900/50">
+              <div className="sticky top-0 z-10 p-5 sm:px-6 border-b border-slate-200 dark:border-zinc-800 flex flex-wrap items-center justify-between gap-4 bg-slate-50/60 dark:bg-zinc-900/50">
                 <div className="flex items-center gap-3">
                   <div className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 ${theme.badgeClass}`}>
                     <FileSpreadsheet className="w-5 h-5" />
@@ -3842,7 +3947,7 @@ export default function App() {
                         if (file) handleImportFileSelect(file);
                         e.target.value = '';
                       }}
-                      className="hidden"
+                      className="hidden text-base sm:text-sm"
                     />
                     <div className="max-w-md mx-auto space-y-2.5">
                       <div className={`w-12 h-12 rounded-2xl mx-auto flex items-center justify-center border ${theme.badgeClass}`}>
@@ -3881,7 +3986,7 @@ export default function App() {
                       value={importPasteText}
                       onChange={(e) => setImportPasteText(e.target.value)}
                       placeholder="GenericName,BrandName,Category,Strength,DosageForm,PackSize,StockQty,SellingPrice..."
-                      className="w-full p-3.5 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 font-mono-code text-xs focus:outline-none"
+                      className="w-full p-3.5 rounded-2xl bg-white dark:bg-zinc-950 border border-slate-200 dark:border-zinc-800 font-mono-code text-base sm:text-sm focus:outline-none"
                     />
                     <div className="flex justify-end">
                       <button
@@ -3967,7 +4072,7 @@ export default function App() {
                               onChange={(e) =>
                                 setImportColumnMap((prev) => ({ ...prev, [field.key]: e.target.value }))
                               }
-                              className="w-full px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-medium"
+                              className="w-full px-2.5 py-1.5 text-base sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 font-medium"
                             >
                               <option value="">-- Auto / Default --</option>
                               {importHeaders.map((h) => (
@@ -3984,7 +4089,7 @@ export default function App() {
                     {/* Staged Items Table */}
                     <div className="border border-slate-200 dark:border-zinc-800 rounded-2xl overflow-hidden">
                       <div className="overflow-x-auto max-h-[320px]">
-                        <table className="w-full text-left border-collapse text-xs">
+                        <table className="w-full min-w-[860px] text-left border-collapse text-xs">
                           <thead>
                             <tr className="border-b border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-[10px] font-display font-bold uppercase tracking-wider text-slate-400 sticky top-0 z-10">
                               <th className="py-2.5 px-3 w-8">Use</th>
@@ -4025,7 +4130,7 @@ export default function App() {
                                           [idx]: !prev[idx]
                                         }))
                                       }
-                                      className="w-3.5 h-3.5 rounded"
+                                      className="w-3.5 h-3.5 text-base sm:text-sm rounded"
                                     />
                                   </td>
                                   <td className="py-2.5 px-3 whitespace-nowrap">
@@ -4092,9 +4197,9 @@ export default function App() {
               </div>
 
               {/* Modal Footer */}
-              <div className="p-4 sm:px-6 border-t border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900/50 flex flex-wrap items-center justify-between gap-3">
+              <div className="sticky bottom-0 z-10 p-4 sm:px-6 pb-[env(safe-area-inset-bottom)] border-t border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900/50 flex flex-wrap items-center justify-between gap-3">
                 <div className="text-xs text-slate-500 dark:text-zinc-400">
-                  Tip: Press <kbd className="px-1.5 py-0.5 rounded border border-slate-300 dark:border-zinc-700 font-mono-code text-[10px]">I</kbd> anywhere in the app to open this Excel/CSV Import Studio.
+                  Tip: Press <kbd className="hidden lg:inline-flex px-1.5 py-0.5 rounded border border-slate-300 dark:border-zinc-700 font-mono-code text-[10px]">I</kbd> anywhere in the app to open this Excel/CSV Import Studio.
                 </div>
                 <div className="flex items-center gap-2.5">
                   <button
@@ -4122,9 +4227,9 @@ export default function App() {
         )}
 
         {compareFamilyCode && (
-          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 rounded-3xl max-w-5xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
-              <div className="p-5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between bg-slate-50/60 dark:bg-zinc-900/50">
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4">
+            <div className="bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 w-full h-dvh sm:h-auto sm:rounded-3xl rounded-none max-w-5xl sm:max-h-[85dvh] flex flex-col shadow-2xl overflow-hidden">
+              <div className="sticky top-0 z-10 p-5 border-b border-slate-200 dark:border-zinc-800 flex items-center justify-between bg-slate-50/60 dark:bg-zinc-900/50">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-2xl border flex items-center justify-center ${theme.badgeClass}`}>
                     <Layers className="w-5 h-5" />
@@ -4151,7 +4256,7 @@ export default function App() {
                 </button>
               </div>
 
-              <div className="overflow-y-auto p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="min-h-0 flex-1 overflow-y-auto p-5 grid grid-cols-1 md:grid-cols-2 gap-3">
                 {comparedFamilyItems.map((variant) => {
                   const isOut = variant.stockQty <= 0;
                   const isExp = variant.daysUntilExpiry <= 0;
@@ -4215,13 +4320,13 @@ export default function App() {
         )}
 
         {editingDrug && (
-          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4">
             <form
               onSubmit={handleSaveDrug}
-              className="bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 rounded-3xl max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto"
+              className="bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 w-full h-dvh sm:h-auto sm:rounded-3xl rounded-none max-w-2xl p-6 space-y-4 shadow-2xl sm:max-h-[90dvh] overflow-y-auto"
             >
               {}
-              <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-3.5">
+              <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 dark:border-zinc-800 pb-3.5 bg-white dark:bg-[#121216]">
                 <div>
                   <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
                     {isAddingNew ? 'Register New Medication Variant' : `Edit Variant — ${editingDrug.sku}`}
@@ -4248,7 +4353,7 @@ export default function App() {
                     value={editingDrug.genericName}
                     onChange={(e) => setEditingDrug({ ...editingDrug, genericName: e.target.value })}
                     placeholder="e.g., Amoxicillin + Clavulanic Acid"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
                   />
                 </div>
                 <div>
@@ -4259,7 +4364,7 @@ export default function App() {
                     value={editingDrug.brandName}
                     onChange={(e) => setEditingDrug({ ...editingDrug, brandName: e.target.value })}
                     placeholder="e.g., Augmentin (GSK)"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
                   />
                 </div>
                 <div>
@@ -4268,7 +4373,7 @@ export default function App() {
                     type="text"
                     value={editingDrug.category}
                     onChange={(e) => setEditingDrug({ ...editingDrug, category: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
                   />
                 </div>
                 <div>
@@ -4279,7 +4384,7 @@ export default function App() {
                     value={editingDrug.strength}
                     onChange={(e) => setEditingDrug({ ...editingDrug, strength: e.target.value })}
                     placeholder="e.g., 625mg"
-                    className="w-full px-3.5 py-2.5 font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
                   />
                 </div>
                 <div>
@@ -4290,7 +4395,7 @@ export default function App() {
                     value={editingDrug.dosageForm}
                     onChange={(e) => setEditingDrug({ ...editingDrug, dosageForm: e.target.value })}
                     placeholder="e.g., Film-Coated Tablet"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
                   />
                 </div>
                 <div>
@@ -4301,7 +4406,7 @@ export default function App() {
                     value={editingDrug.packSize}
                     onChange={(e) => setEditingDrug({ ...editingDrug, packSize: e.target.value })}
                     placeholder="e.g., 14s Calendar Pack"
-                    className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
                   />
                 </div>
                 <div>
@@ -4310,7 +4415,7 @@ export default function App() {
                     type="text"
                     value={editingDrug.batchNumber}
                     onChange={(e) => setEditingDrug({ ...editingDrug, batchNumber: e.target.value })}
-                    className="w-full px-3.5 py-2.5 font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
                   />
                 </div>
                 <div>
@@ -4319,7 +4424,7 @@ export default function App() {
                     type="date"
                     value={editingDrug.expiryDate}
                     onChange={(e) => setEditingDrug({ ...editingDrug, expiryDate: e.target.value })}
-                    className="w-full px-3.5 py-2.5 font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
                   />
                 </div>
                 <div>
@@ -4328,7 +4433,7 @@ export default function App() {
                     type="text"
                     value={editingDrug.shelfLocation}
                     onChange={(e) => setEditingDrug({ ...editingDrug, shelfLocation: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent font-medium"
                   />
                 </div>
                 <div>
@@ -4337,7 +4442,7 @@ export default function App() {
                     type="number"
                     value={editingDrug.stockQty}
                     onChange={(e) => setEditingDrug({ ...editingDrug, stockQty: e.target.value })}
-                    className="w-full px-3.5 py-2.5 font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
                   />
                 </div>
                 <div>
@@ -4347,7 +4452,7 @@ export default function App() {
                     step="50"
                     value={editingDrug.costPrice}
                     onChange={(e) => setEditingDrug({ ...editingDrug, costPrice: e.target.value })}
-                    className="w-full px-3.5 py-2.5 font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
                   />
                 </div>
                 <div>
@@ -4357,7 +4462,7 @@ export default function App() {
                     step="50"
                     value={editingDrug.sellingPrice}
                     onChange={(e) => setEditingDrug({ ...editingDrug, sellingPrice: e.target.value })}
-                    className="w-full px-3.5 py-2.5 font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
+                    className="w-full px-3.5 py-2.5 text-base sm:text-sm font-mono-code border border-slate-200 dark:border-zinc-700 rounded-xl bg-transparent"
                   />
                 </div>
               </div>
@@ -4367,12 +4472,12 @@ export default function App() {
                   type="checkbox"
                   checked={editingDrug.rxRequired}
                   onChange={(e) => setEditingDrug({ ...editingDrug, rxRequired: e.target.checked })}
-                  className="w-4 h-4 rounded"
+                  className="w-4 h-4 text-base sm:text-sm rounded"
                 />
                 <span>Prescription Required (Rx Only Medication)</span>
               </label>
 
-              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-200 dark:border-zinc-800">
+              <div className="sticky bottom-0 flex items-center justify-end gap-2.5 pt-3 pb-[env(safe-area-inset-bottom)] border-t border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121216]">
                 <button
                   type="button"
                   onClick={() => setEditingDrug(null)}
@@ -4389,9 +4494,9 @@ export default function App() {
         )}
 
         {lastReceipt && (
-          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-              <div className="flex items-start justify-between border-b border-slate-200 dark:border-zinc-800 pb-3">
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4">
+            <div className="bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 w-full h-dvh sm:h-auto sm:rounded-3xl rounded-none max-w-md p-6 space-y-4 shadow-2xl overflow-y-auto">
+              <div className="sticky top-0 z-10 flex items-start justify-between border-b border-slate-200 dark:border-zinc-800 pb-3 bg-white dark:bg-[#121216]">
                 <div>
                   <span className={`text-[10px] font-mono-code font-bold uppercase px-2 py-0.5 rounded ${theme.badgeClass}`}>
                     Verified Dispensing Record
@@ -4403,7 +4508,7 @@ export default function App() {
                 </div>
                 <button
                   onClick={() => setLastReceipt(null)}
-                  className="p-1.5 rounded-xl border border-slate-200 dark:border-zinc-700"
+                  className="p-1.5 min-h-10 min-w-10 md:min-h-0 md:min-w-0 inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-zinc-700"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -4455,7 +4560,7 @@ export default function App() {
                 </span>
               </div>
 
-              <div className="pt-2 flex items-center gap-2.5">
+              <div className="sticky bottom-0 pt-2 pb-[env(safe-area-inset-bottom)] flex items-center gap-2.5 bg-white dark:bg-[#121216]">
                 <button
                   onClick={() => window.print()}
                   className={`flex-1 py-2.5 rounded-2xl text-xs font-display font-bold flex items-center justify-center gap-2 ${theme.btnClass}`}
