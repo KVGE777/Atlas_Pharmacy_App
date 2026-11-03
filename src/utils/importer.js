@@ -235,5 +235,4 @@ function normalizeImportedRow(rawObj, colMap, index, existingCatalog) {
   };
 }
 
-
 export { IMPORT_FIELD_DEFS, SAMPLE_IMPORT_CSV, parseDelimitedText, autoDetectColumnMap, normalizeDateValue, normalizeImportedRow };

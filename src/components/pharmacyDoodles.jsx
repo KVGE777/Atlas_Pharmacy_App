@@ -1,6 +1,6 @@
 import React from 'react';
-import { ShoppingCart, Sparkles, Wand2 } from './icons';
 import { formatNaira } from '../data/catalogData';
+import { ShoppingCart, Sparkles, Wand2 } from './icons';
 
 function DosageFormIcon({ form = '', className = 'w-6 h-6' }) {
   const f = form.toLowerCase();
@@ -198,7 +198,7 @@ function HeroApothecaryBanner({
   return (
     <div className="space-y-4">
       {/* Practical Daily Shift & Cash Register Status Bar */}
-      <div className="hero-shift-bar rounded-3xl border border-slate-200/90 dark:border-zinc-800/90 bg-white dark:bg-[#121216] p-4 sm:px-6 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="rounded-3xl border border-slate-200/90 dark:border-zinc-800/90 bg-white dark:bg-[#121216] p-4 sm:px-6 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className={`px-3 py-1.5 rounded-xl text-xs font-display font-bold border flex items-center gap-2 ${theme.badgeClass}`}>
             <span className={`w-2 h-2 rounded-full animate-pulse ${theme.barClass}`} />
@@ -241,13 +241,13 @@ function HeroApothecaryBanner({
       </div>
 
       {/* Main Apothecary Quick-Dispense Hero */}
-      <div className="hero-main relative overflow-hidden rounded-3xl border border-slate-200/90 dark:border-zinc-800/90 bg-white dark:bg-[#121216] p-5 sm:p-6 shadow-xs transition-all">
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 dark:border-zinc-800/90 bg-white dark:bg-[#121216] p-5 sm:p-6 shadow-xs transition-all">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.35] dark:opacity-[0.18]"
           style={{ backgroundImage: 'radial-gradient(currentColor 1px, transparent 1px)', backgroundSize: '20px 20px' }}
         />
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="hero-copy space-y-3 max-w-2xl">
+          <div className="space-y-3 max-w-2xl">
             <div className="flex flex-wrap items-center gap-2">
               <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border ${theme.badgeClass}`}>
                 <Sparkles className="w-3.5 h-3.5" />
@@ -279,7 +279,7 @@ function HeroApothecaryBanner({
               <strong className="font-semibold text-slate-900 dark:text-zinc-200">
                 POS Dispensing Counter
               </strong>{' '}
-              with live Naira pricing, pack/sachet splits, and expiry checks.
+              with live Naira pricing, pack/sachet splits, and FEFO expiry checks.
             </p>
 
             <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -308,7 +308,7 @@ function HeroApothecaryBanner({
           </div>
 
           {doodlesEnabled && (
-            <div className={`hero-art relative shrink-0 rounded-2xl border border-slate-200/80 dark:border-zinc-800/80 px-4 py-3 ${theme.softBgClass} ${theme.textClass} flex items-center justify-center`}>
+            <div className={`relative shrink-0 rounded-2xl border border-slate-200/80 dark:border-zinc-800/80 px-4 py-3 ${theme.softBgClass} ${theme.textClass} flex items-center justify-center`}>
               <svg viewBox="0 0 340 128" fill="none" className="w-full max-w-[330px] h-[116px] overflow-visible" aria-label="Animated Pharmacy Apothecary Illustration">
                 <path
                   d="M8 98 H75 L86 76 L96 112 L108 60 L120 106 L130 90 L142 98 H332"

@@ -71,9 +71,9 @@ const RAW_CATEGORY_TO_CLINICAL = {
 function formatNaira(amount) {
   const num = Number(amount) || 0;
   if (num > 0 && num < 10 && num % 1 !== 0) {
-    return `\u20A6${num.toFixed(2)}`;
+    return `₦${num.toFixed(2)}`;
   }
-  return `\u20A6${Math.round(num).toLocaleString('en-NG')}`;
+  return `₦${Math.round(num).toLocaleString('en-NG')}`;
 }
 
 function TallManName({ name = '', accentTextClass = '' }) {
