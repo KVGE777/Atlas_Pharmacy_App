@@ -1,6 +1,6 @@
 import React from 'react';
 import { formatNaira } from '../data/catalogData';
-import { ShoppingCart, Sparkles, Wand2 } from './icons';
+import { ShoppingCart, Sparkles } from './icons';
 
 function DosageFormIcon({ form = '', className = 'w-6 h-6' }) {
   const f = form.toLowerCase();
@@ -179,7 +179,6 @@ function HeroApothecaryBanner({
   kpiStats,
   salesHistory = [],
   doodlesEnabled,
-  setDoodlesEnabled,
   onQuickFilterClick,
   onOpenPos,
   onOpenRestock
@@ -256,14 +255,6 @@ function HeroApothecaryBanner({
               <span className="text-xs font-medium text-slate-500 dark:text-zinc-400">
                 Quick Counter Dispensing &amp; Stock Lookup
               </span>
-              <button
-                onClick={() => setDoodlesEnabled(!doodlesEnabled)}
-                className="ml-auto sm:ml-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 text-[11px] font-semibold text-slate-600 dark:text-zinc-300 hover:border-slate-400 transition-all"
-                title="Toggle Animated Pharmacy Doodles"
-              >
-                <Wand2 className={`w-3 h-3 ${theme.textClass}`} />
-                <span>{doodlesEnabled ? 'Playful Doodles: ON' : 'Compact Clinical Mode'}</span>
-              </button>
             </div>
 
             <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-tight">

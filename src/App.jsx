@@ -1,22 +1,22 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Search, Plus, Minus, ShoppingCart, AlertTriangle, X, Download, Printer, RefreshCw, Layers,
-  ShieldAlert, Clock, ArrowUpDown, ChevronLeft, ChevronRight, Edit3, FolderGit2, Copy, Sun, Moon,
+  ShieldAlert, Clock, ArrowUpDown, ChevronLeft, ChevronRight, Edit3, Copy, Sun, Moon,
   Pill, CheckCircle2, Receipt, Boxes, LayoutGrid, List, Sparkles, PackagePlus, ArrowUpRight, Command,
-  FileCheck2, Wand2, HomeIcon, Trash2, PanelLeftClose, PanelLeftOpen, Bell, Keyboard, Truck,
+  FileCheck2, HomeIcon, Trash2, PanelLeftClose, PanelLeftOpen, Bell, Keyboard, Truck,
   SettingsIcon, RotateCcw, Menu, Upload, FileSpreadsheet
 } from './components/icons';
 import {
   formatNaira, TallManName, CLINICAL_CATEGORIES, generateInitialCatalog, DRUG_FAMILIES
 } from './data/catalogData';
 import { ACCENT_THEMES } from './theme/theme';
-import { ARCHITECTURE_FILES } from './data/architectureDocs';
 import { IMPORT_FIELD_DEFS, SAMPLE_IMPORT_CSV, parseDelimitedText, autoDetectColumnMap, normalizeImportedRow } from './utils/importer';
 import {
-  DosageFormIcon, PackTypeDoodle, KpiDoodleIllustration, HeroApothecaryBanner,
+  DosageFormIcon, PackTypeDoodle, HeroApothecaryBanner,
   EmptyPosCounterIllustration, DispensedStampDoodle
 } from './components/pharmacyDoodles';
 import { calculateInventoryMetrics, updateStock, quarantineExpiredStock } from './services/inventoryDatabase';
+import { isSupabaseConfigured, supabase } from './lib/supabase';
 export default function App() {
   useEffect(() => {
     // Load SheetJS (xlsx) so binary .xlsx and .xls Excel files parse natively in the browser
@@ -32,15 +32,28 @@ export default function App() {
 
   const [darkMode, setDarkMode] = useState(false);
   const [accentKey, setAccentKey] = useState('teal');
-  const [doodlesEnabled, setDoodlesEnabled] = useState(true);
   const theme = ACCENT_THEMES[accentKey] || ACCENT_THEMES.teal;
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(isSupabaseConfigured);
+  const [authError, setAuthError] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginMode, setLoginMode] = useState('staff');
+  const [authUserId, setAuthUserId] = useState(null);
+  const [loginName, setLoginName] = useState('Dispensing Staff');
+  const [loginPin, setLoginPin] = useState('');
+  const [staffMembers, setStaffMembers] = useState([
+    { id: 'staff-admin', fullName: 'Pharmacy Administrator', phone: '', email: '', role: 'admin', status: 'active', pin: null },
+    { id: 'staff-demo', fullName: 'Dispensing Staff', phone: '', email: '', role: 'salesperson', status: 'active', pin: '4821' }
+  ]);
+  const [staffForm, setStaffForm] = useState({ fullName: '', phone: '', email: '', role: 'salesperson' });
+  const [generatedStaffPin, setGeneratedStaffPin] = useState(null);
 
   // Collapsible vertical sidebar & multi-page navigation state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const showSidebarLabels = !isSidebarCollapsed || mobileMenuOpen;
-  const [activePage, setActivePage] = useState('home'); // 'home' | 'inventory' | 'pos' | 'suppliers' | 'safety' | 'codebase' | 'settings'
-  const [selectedCodeFileIdx, setSelectedCodeFileIdx] = useState(0);
+  const [activePage, setActivePage] = useState('home'); // 'home' | 'inventory' | 'pos' | 'suppliers' | 'safety' | 'settings'
   const [posSubTab, setPosSubTab] = useState('terminal'); // 'terminal' | 'invoices'
   const [catalogViewMode, setCatalogViewMode] = useState('grid');
   const [isMobileViewport, setIsMobileViewport] = useState(() => window.innerWidth < 768);
@@ -75,35 +88,6 @@ export default function App() {
 
     tabletLandscapeQuery.addEventListener('change', handleTabletLandscapeChange);
     return () => tabletLandscapeQuery.removeEventListener('change', handleTabletLandscapeChange);
-  }, []);
-
-  const handleDownloadCodeFile = useCallback((fileObj) => {
-    const filename = fileObj.path.split('/').pop() || 'module.js';
-    const blob = new Blob([fileObj.code], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  }, []);
-
-  const handleDownloadAllProjectFiles = useCallback(() => {
-    const bundleText = ARCHITECTURE_FILES.map(
-      (f) =>
-        `================================================================================\nFILE: ${f.path}\nROLE: ${f.role}\nSUMMARY: ${f.summary}\n================================================================================\n\n${f.code}\n\n`
-    ).join('\n');
-    const blob = new Blob([bundleText], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'pharmacore-multifile-project-bundle.txt';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   }, []);
 
   // Pharmacy profile for invoices & receipts
@@ -218,6 +202,9 @@ export default function App() {
   const [posCategory, setPosCategory] = useState('ALL');
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [invoicePaymentFilter, setInvoicePaymentFilter] = useState('ALL');
+  const [salesPeriod, setSalesPeriod] = useState('30d');
+  const [salesStartDate, setSalesStartDate] = useState('');
+  const [salesEndDate, setSalesEndDate] = useState('');
 
   const [cart, setCart] = useState(() => {
     const initialCatalog = generateInitialCatalog();
@@ -258,6 +245,7 @@ export default function App() {
       timestamp: '2026-10-15 09:14',
       patientName: 'Chidi Nwosu',
       prescriberNote: 'Dr. Adeyemi (Rx #4419)',
+      cashier: 'Pharmacy Administrator',
       paymentMethod: 'Card / POS',
       status: 'PAID',
       itemsCount: 4,
@@ -290,6 +278,7 @@ export default function App() {
       timestamp: '2026-10-15 11:32',
       patientName: 'Amina Bello',
       prescriberNote: 'OTC Pharmacist Consult',
+      cashier: 'Dispensing Staff',
       paymentMethod: 'Transfer',
       status: 'PAID',
       itemsCount: 2,
@@ -327,10 +316,107 @@ export default function App() {
     }, 3400);
   }, []);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase) {
+      setAuthLoading(false);
+      return undefined;
+    }
+
+    let active = true;
+    const loadSessionProfile = async (session) => {
+      if (!session?.user) {
+        if (active) {
+          setCurrentUser(null);
+          setAuthUserId(null);
+          setAuthLoading(false);
+        }
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('staff_profiles')
+        .select('id, full_name, email, role, status, organization_id, branch_id')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      if (!active) return;
+      if (error || !data) {
+        setAuthError(error?.message || 'Your account is not linked to an active staff profile.');
+        await supabase.auth.signOut();
+        setAuthLoading(false);
+        return;
+      }
+      if (data.status !== 'active') {
+        setAuthError('This staff account is inactive. Ask an administrator to reactivate it.');
+        await supabase.auth.signOut();
+        setAuthLoading(false);
+        return;
+      }
+
+      setAuthUserId(session.user.id);
+      setCurrentUser({
+        id: data.id,
+        role: data.role,
+        name: data.full_name,
+        email: data.email,
+        organizationId: data.organization_id,
+        branchId: data.branch_id
+      });
+      setAuthLoading(false);
+    };
+
+    supabase.auth.getSession().then(({ data: { session } }) => loadSessionProfile(session));
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      setTimeout(() => loadSessionProfile(session), 0);
+    });
+
+    return () => {
+      active = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !currentUser || currentUser.role !== 'admin') return undefined;
+
+    let active = true;
+    supabase
+      .from('staff_profiles')
+      .select('id, full_name, phone, email, role, status')
+      .eq('organization_id', currentUser.organizationId)
+      .order('full_name')
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) {
+          showToast(`Could not load staff accounts: ${error.message}`, 'error');
+          return;
+        }
+        setStaffMembers(
+          (data || []).map((member) => ({
+            id: member.id,
+            fullName: member.full_name,
+            phone: member.phone || '',
+            email: member.email || '',
+            role: member.role,
+            status: member.status,
+            pin: null
+          }))
+        );
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [currentUser, showToast]);
+
   const posSearchInputRef = useRef(null);
   const invSearchInputRef = useRef(null);
 
   const openNewDrugModal = useCallback(() => {
+    if (currentUser?.role !== 'admin') {
+      showToast('Inventory changes are restricted to administrators.', 'error');
+      return;
+    }
     setIsAddingNew(true);
     setEditingDrug({
       id: `sku-${Date.now()}`,
@@ -353,7 +439,7 @@ export default function App() {
       sellingPrice: 4500,
       rxRequired: true
     });
-  }, []);
+  }, [currentUser, showToast]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -385,8 +471,7 @@ export default function App() {
           setPosSubTab('terminal');
         }
         if (e.key === '4') {
-          setActivePage('pos');
-          setPosSubTab('invoices');
+          setActivePage('sales');
         }
         if (e.key === '5') setActivePage('suppliers');
         if (e.key === '6') setActivePage('safety');
@@ -706,6 +791,48 @@ export default function App() {
     });
   }, [salesHistory, invoiceSearch, invoicePaymentFilter]);
 
+  const filteredSales = useMemo(() => {
+    const now = new Date();
+    let start = null;
+    let end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+
+    if (salesPeriod === 'today') {
+      start = new Date(now);
+      start.setHours(0, 0, 0, 0);
+    } else if (salesPeriod === 'yesterday') {
+      start = new Date(now);
+      start.setDate(start.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(start);
+      end.setHours(23, 59, 59, 999);
+    } else if (salesPeriod === '7d' || salesPeriod === '30d') {
+      start = new Date(now);
+      start.setDate(start.getDate() - (salesPeriod === '7d' ? 6 : 29));
+      start.setHours(0, 0, 0, 0);
+    } else if (salesPeriod === 'custom' && salesStartDate && salesEndDate) {
+      start = new Date(salesStartDate);
+      end = new Date(salesEndDate);
+    }
+
+    return salesHistory.filter((sale) => {
+      const timestamp = new Date(sale.timestamp.replace(' ', 'T'));
+      if (start && (timestamp < start || timestamp > end)) return false;
+      return true;
+    });
+  }, [salesHistory, salesPeriod, salesStartDate, salesEndDate]);
+
+  const salesReportSummary = useMemo(
+    () => ({
+      grossSales: filteredSales.reduce((sum, sale) => sum + sale.subtotal, 0),
+      discounts: filteredSales.reduce((sum, sale) => sum + sale.discountAmount, 0),
+      netSales: filteredSales.reduce((sum, sale) => sum + sale.total, 0),
+      transactionCount: filteredSales.length,
+      itemsSold: filteredSales.reduce((sum, sale) => sum + sale.itemsCount, 0)
+    }),
+    [filteredSales]
+  );
+
   const comparedFamilyItems = useMemo(() => {
     if (!compareFamilyCode) return [];
     return catalog.filter((item) => item.lasaGroup === compareFamilyCode);
@@ -906,6 +1033,7 @@ export default function App() {
       prescriberNote: cartSummary.hasRxItems
         ? prescriberNote.trim() || 'Verified Prescription on File'
         : 'OTC Pharmacist Consult',
+      cashier: currentUser?.name || 'Dispensing Staff',
       paymentMethod,
       status: 'PAID',
       itemsCount: cart.reduce((acc, l) => acc + l.qty, 0),
@@ -963,10 +1091,12 @@ export default function App() {
   };
 
   const adjustStock = (drugId, delta) => {
+    if (!isAdmin) return;
     setCatalog((prev) => updateStock(prev, drugId, delta));
   };
 
   const handleConfirmDeleteDrug = () => {
+    if (!isAdmin) return;
     if (!drugToDelete) return;
     setCatalog((prev) => prev.filter((item) => item.id !== drugToDelete.id));
     setCart((prev) => prev.filter((line) => line.drug.id !== drugToDelete.id));
@@ -976,6 +1106,7 @@ export default function App() {
   };
 
   const handleDeleteSelectedDrugs = () => {
+    if (!isAdmin) return;
     if (selectedDrugIds.length === 0) return;
     const setIds = new Set(selectedDrugIds);
     setCatalog((prev) => prev.filter((item) => !setIds.has(item.id)));
@@ -985,6 +1116,7 @@ export default function App() {
   };
 
   const handleQuarantineExpiredBatches = () => {
+    if (!isAdmin) return;
     const expiredItems = catalog.filter((i) => i.daysUntilExpiry <= 0 && i.stockQty > 0);
     if (expiredItems.length === 0) {
       showToast('All expired batches are already quarantined at 0 stock.', 'info');
@@ -996,6 +1128,7 @@ export default function App() {
 
   const handleSaveDrug = (e) => {
     e.preventDefault();
+    if (!isAdmin) return;
     if (!editingDrug) return;
 
     const today = new Date('2026-10-15T12:00:00Z');
@@ -1026,6 +1159,7 @@ export default function App() {
   };
 
   const handleBulkRestockLow = () => {
+    if (!isAdmin) return;
     let restockedCount = 0;
     setCatalog((prev) =>
       prev.map((item) => {
@@ -1040,6 +1174,7 @@ export default function App() {
   };
 
   const handleGeneratePurchaseOrder = () => {
+    if (!isAdmin) return;
     const lowItems = catalog.filter((i) => i.stockQty <= i.reorderLevel);
     const estCost = lowItems.slice(0, 25).reduce((acc, i) => acc + i.costPrice * 30, 0);
     const newPo = {
@@ -1057,6 +1192,7 @@ export default function App() {
   };
 
   const handleReceivePurchaseOrder = (poId) => {
+    if (!isAdmin) return;
     setPurchaseOrders((prev) =>
       prev.map((po) => (po.id === poId ? { ...po, status: 'RECEIVED' } : po))
     );
@@ -1136,84 +1272,377 @@ export default function App() {
     }
   };
 
+  const isAdmin = currentUser?.role === 'admin';
   const NAV_ITEMS = [
     {
       id: 'home',
-      label: 'Home Overview',
-      subtitle: 'Stats, Warnings & Hotkeys',
+      label: 'Dashboard',
+      subtitle: 'Today at a glance',
       icon: HomeIcon,
       hotkey: '1',
       badge: reminders.filter((r) => !r.done).length || null
     },
     {
       id: 'inventory',
-      label: 'Inventory Manager',
-      subtitle: 'Add, Edit & Delete Stock',
+      label: 'Inventory',
+      subtitle: 'Stock and medication records',
       icon: Boxes,
       hotkey: '2',
       badge: kpiStats.totalSkus.toLocaleString()
     },
     {
       id: 'pos',
-      label: 'Sales & POS',
-      subtitle: 'Dispense, Invoices & Receipts',
+      label: 'Point of Sale',
+      subtitle: 'Dispensing and receipts',
       icon: ShoppingCart,
       hotkey: '3',
       badge: cart.length > 0 ? `${cart.length} in tray` : salesHistory.length
     },
     {
+      id: 'sales',
+      label: 'Sales',
+      subtitle: 'Read-only sales history',
+      icon: Receipt,
+      hotkey: '4',
+      badge: salesHistory.length
+    },
+    {
       id: 'suppliers',
-      label: 'Suppliers & Orders',
-      subtitle: 'Purchase Orders & Receiving',
+      label: 'Procurement',
+      subtitle: 'Suppliers and purchase orders',
       icon: Truck,
       hotkey: '5',
       badge: purchaseOrders.filter((p) => p.status === 'PENDING_DELIVERY').length || null
     },
     {
       id: 'safety',
-      label: 'Expiry & LASA Audit',
-      subtitle: 'FEFO Quarantine & Variants',
+      label: 'Safety & Expiry',
+      subtitle: 'Expiry checks and quarantine',
       icon: ShieldAlert,
       hotkey: '6',
       badge: kpiStats.expiringSoonCount + kpiStats.expiredCount
     },
     {
-      id: 'codebase',
-      label: 'Project Files (10)',
-      subtitle: 'Separated Multi-File Code',
-      icon: FolderGit2,
-      hotkey: '7',
-      badge: `${ARCHITECTURE_FILES.length} files`
-    },
-    {
       id: 'settings',
-      label: 'Settings & Theme',
-      subtitle: 'Palette & Pharmacy Profile',
+      label: 'Settings',
+      subtitle: 'Pharmacy profile and preferences',
       icon: SettingsIcon,
       hotkey: null,
       badge: null
+    },
+    {
+      id: 'staff',
+      label: 'Staff',
+      subtitle: 'Employee access and PINs',
+      icon: SettingsIcon,
+      hotkey: null,
+      badge: staffMembers.filter((member) => member.status === 'active').length
     }
   ];
 
-  const currentPageMeta = NAV_ITEMS.find((item) => item.id === activePage) || NAV_ITEMS[0];
+  const visibleNavItems = NAV_ITEMS.filter((item) => isAdmin || ['pos', 'sales', 'inventory'].includes(item.id));
+  const currentPageMeta = visibleNavItems.find((item) => item.id === activePage) || visibleNavItems[0];
+
+  const handleLogin = async () => {
+    if (isSupabaseConfigured && supabase) {
+      setAuthError('');
+      setAuthLoading(true);
+      if (loginMode === 'staff') {
+        const { data, error } = await supabase.functions.invoke('authenticate-staff', {
+          body: { name: loginName.trim(), pin: loginPin }
+        });
+        if (error || !data?.tokenHash) {
+          setAuthError(error?.message || data?.error || 'Invalid staff name or PIN.');
+          setAuthLoading(false);
+          return;
+        }
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          token_hash: data.tokenHash,
+          type: data.type || 'magiclink'
+        });
+        if (verifyError) {
+          setAuthError(verifyError.message);
+          setAuthLoading(false);
+        }
+        return;
+      }
+      const { error } = await supabase.auth.signInWithPassword({
+        email: loginEmail.trim(),
+        password: loginPassword
+      });
+      if (error) {
+        setAuthError(error.message);
+        setAuthLoading(false);
+      }
+      return;
+    }
+
+    const role = 'employee';
+    const name = role === 'admin' ? 'Pharmacy Administrator' : loginName.trim() || 'Dispensing Staff';
+    const member = staffMembers.find(
+      (staff) => staff.fullName.toLowerCase() === name.toLowerCase() && staff.role !== 'admin'
+    );
+    if (role !== 'admin' && (!member || member.status !== 'active' || member.pin !== loginPin)) {
+      showToast('Invalid staff name or 4-digit PIN.', 'error');
+      return;
+    }
+    setCurrentUser({ role: role === 'admin' ? 'admin' : member.role, name });
+    setActivePage(role === 'admin' ? 'home' : 'pos');
+    setPosSubTab('terminal');
+  };
+
+  const handleSignOut = async () => {
+    if (isSupabaseConfigured && supabase) {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        showToast(`Could not sign out: ${error.message}`, 'error');
+        return;
+      }
+    }
+    setCurrentUser(null);
+    setAuthUserId(null);
+  };
+
+  const invokeStaffAction = async (payload) => {
+    if (!supabase) return { error: new Error('Supabase is not configured.') };
+    const { data, error } = await supabase.functions.invoke('manage-staff', { body: payload });
+    if (error?.context instanceof Response) {
+      try {
+        const responseBody = await error.context.json();
+        return {
+          data: responseBody,
+          error: new Error(responseBody?.error || error.message)
+        };
+      } catch {
+        return { data, error };
+      }
+    }
+    return { data, error };
+  };
+
+  const handleCreateStaff = async (event) => {
+    event.preventDefault();
+    const fullName = staffForm.fullName.trim();
+    if (!fullName) {
+      showToast('Enter the staff member’s full name.', 'error');
+      return;
+    }
+    if (staffMembers.some((member) => member.fullName.toLowerCase() === fullName.toLowerCase())) {
+      showToast('Each staff member must have a unique name.', 'error');
+      return;
+    }
+    if (isSupabaseConfigured) {
+      if (!staffForm.email.trim()) {
+        showToast('An email is required for the staff login.', 'error');
+        return;
+      }
+      const { data, error } = await invokeStaffAction({
+        action: 'create',
+        fullName,
+        phone: staffForm.phone,
+        email: staffForm.email,
+        role: staffForm.role
+      });
+      if (error) {
+        showToast(`Could not create staff account: ${error.message}`, 'error');
+        return;
+      }
+      setStaffMembers((prev) => [...prev, {
+        id: data.id,
+        fullName: data.fullName,
+        phone: staffForm.phone.trim(),
+        email: staffForm.email.trim(),
+        role: staffForm.role,
+        status: 'active',
+        pin: null
+      }]);
+      setGeneratedStaffPin({ name: fullName, pin: data.pin });
+      setStaffForm({ fullName: '', phone: '', email: '', role: 'salesperson' });
+      showToast(`Created ${fullName}'s staff account.`, 'success');
+      return;
+    }
+
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
+    const member = {
+      id: `staff-${Date.now()}`,
+      ...staffForm,
+      fullName,
+      phone: staffForm.phone.trim(),
+      email: staffForm.email.trim(),
+      status: 'active',
+      pin
+    };
+    setStaffMembers((prev) => [...prev, member]);
+    setGeneratedStaffPin({ name: fullName, pin });
+    setStaffForm({ fullName: '', phone: '', email: '', role: 'salesperson' });
+    showToast(`Created ${fullName}'s staff account.`, 'success');
+  };
+
+  const handleResetStaffPin = async (memberId) => {
+    const member = staffMembers.find((staff) => staff.id === memberId);
+    if (!member) return;
+    if (isSupabaseConfigured) {
+      const { data, error } = await invokeStaffAction({ action: 'reset-pin', memberId });
+      if (error) {
+        showToast(`Could not reset PIN: ${error.message}`, 'error');
+        return;
+      }
+      setGeneratedStaffPin({ name: member.fullName, pin: data.pin });
+      showToast(`Generated a new PIN for ${member.fullName}.`, 'success');
+      return;
+    }
+    const pin = String(Math.floor(1000 + Math.random() * 9000));
+    setStaffMembers((prev) => prev.map((staff) => (staff.id === memberId ? { ...staff, pin } : staff)));
+    setGeneratedStaffPin({ name: member.fullName, pin });
+    showToast(`Generated a new PIN for ${member.fullName}.`, 'success');
+  };
+
+  const handleToggleStaffStatus = async (memberId) => {
+    const member = staffMembers.find((staff) => staff.id === memberId);
+    if (!member) return;
+    const nextStatus = member.status === 'active' ? 'inactive' : 'active';
+    if (isSupabaseConfigured) {
+      const { error } = await invokeStaffAction({ action: 'set-status', memberId, status: nextStatus });
+      if (error) {
+        showToast(`Could not update staff status: ${error.message}`, 'error');
+        return;
+      }
+    }
+    setStaffMembers((prev) =>
+      prev.map((staff) =>
+        staff.id === memberId ? { ...staff, status: nextStatus } : staff
+      )
+    );
+  };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-dvh bg-[#FAF9F5] dark:bg-[#09090B] flex items-center justify-center font-sans-ui">
+        <div className="text-sm text-slate-500 dark:text-zinc-400">Restoring secure session…</div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-dvh bg-[#FAF9F5] dark:bg-[#09090B] text-slate-900 dark:text-slate-100 flex items-center justify-center p-5 font-sans-ui">
+        <div className="w-full max-w-md bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 rounded-3xl p-7 sm:p-9 shadow-xl">
+          <div className="flex items-center gap-3 mb-8">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${theme.btnClass}`}>
+              <span className="font-serif-editorial italic font-bold text-2xl">Rx</span>
+            </div>
+            <div>
+              <div className="font-display font-extrabold text-xl">PharmaCore</div>
+              <div className="text-xs text-slate-500 dark:text-zinc-400">Choose your workspace</div>
+            </div>
+          </div>
+          <h1 className="font-display text-2xl font-bold mb-2">Sign in to PharmaCore</h1>
+          {isSupabaseConfigured && (
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-100 dark:bg-zinc-900 mb-5">
+              <button
+                type="button"
+                onClick={() => setLoginMode('staff')}
+                className={`py-2 rounded-xl text-sm font-display font-bold ${loginMode === 'staff' ? 'bg-white dark:bg-zinc-800 shadow-sm' : 'text-slate-500'}`}
+              >
+                Staff PIN
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoginMode('admin')}
+                className={`py-2 rounded-xl text-sm font-display font-bold ${loginMode === 'admin' ? 'bg-white dark:bg-zinc-800 shadow-sm' : 'text-slate-500'}`}
+              >
+                Administrator
+              </button>
+            </div>
+          )}
+          <p className="text-sm text-slate-500 dark:text-zinc-400 mb-6">
+            {isSupabaseConfigured
+              ? loginMode === 'staff'
+                ? 'Use the staff name and 4-digit PIN provided by your administrator.'
+                : 'Sign in with the administrator account created in Supabase.'
+              : 'Employees work in dispensing and sales. Administrators manage the pharmacy.'}
+          </p>
+          {isSupabaseConfigured && loginMode === 'admin' ? (
+            <>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Email</label>
+              <input
+                type="email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                className="w-full px-3.5 py-3 text-base rounded-2xl border border-slate-200 dark:border-zinc-800 bg-transparent mb-4"
+                autoComplete="email"
+              />
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Password</label>
+              <input
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                className="w-full px-3.5 py-3 text-base rounded-2xl border border-slate-200 dark:border-zinc-800 bg-transparent mb-4"
+                autoComplete="current-password"
+              />
+            </>
+          ) : (
+            <>
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">Staff name</label>
+              <input
+                value={loginName}
+                onChange={(e) => setLoginName(e.target.value)}
+                className="w-full px-3.5 py-3 text-base rounded-2xl border border-slate-200 dark:border-zinc-800 bg-transparent mb-4"
+                placeholder="Name of staff logged in"
+              />
+              <label className="block text-xs font-semibold text-slate-500 mb-1.5">4-digit PIN</label>
+              <input
+                type="password"
+                inputMode="numeric"
+                maxLength="4"
+                value={loginPin}
+                onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, ''))}
+                className="w-full px-3.5 py-3 text-base rounded-2xl border border-slate-200 dark:border-zinc-800 bg-transparent mb-4"
+                placeholder="••••"
+              />
+            </>
+          )}
+          {authError && <p className="text-xs text-red-600 dark:text-red-400 mb-4">{authError}</p>}
+          <div className="grid gap-3">
+            <button onClick={handleLogin} className={`w-full py-3 rounded-2xl font-display font-bold ${theme.btnClass}`}>
+              Sign in
+            </button>
+            {!isSupabaseConfigured && (
+              <button
+                onClick={() => {
+                  setCurrentUser({ role: 'admin', name: 'Pharmacy Administrator' });
+                  setActivePage('home');
+                }}
+                className="w-full py-3 rounded-2xl border border-slate-300 dark:border-zinc-700 font-display font-bold"
+              >
+                Enter Admin Workspace
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] text-slate-400 mt-5">
+            {isSupabaseConfigured ? 'Protected by Supabase Auth and persistent browser sessions.' : 'Prototype access boundary — configure Supabase to enable real sessions.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={darkMode ? 'dark' : ''}>
       <style>{`
         .font-sans-ui {
-          font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-          letter-spacing: -0.01em;
+          font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         .font-display {
-          font-family: 'Outfit', 'Plus Jakarta Sans', sans-serif;
-          letter-spacing: -0.02em;
+          font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+          letter-spacing: -0.015em;
         }
         .font-serif-editorial {
-          font-family: 'Fraunces', Georgia, serif;
-          letter-spacing: -0.02em;
+          font-family: 'Source Serif 4', Georgia, serif;
+          letter-spacing: -0.01em;
         }
         .font-mono-code {
-          font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+          font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
           font-variant-numeric: tabular-nums;
         }
         @keyframes doodleFloat {
@@ -1360,7 +1789,7 @@ export default function App() {
                   Apothecary Workspace
                 </div>
               )}
-              {NAV_ITEMS.map((item) => {
+              {visibleNavItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = activePage === item.id;
                 return (
@@ -1448,10 +1877,10 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div>
                   <button
                     onClick={() => setDarkMode(!darkMode)}
-                    className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-display font-bold transition-colors"
+                    className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-display font-bold transition-colors"
                   >
                     {darkMode ? (
                       <>
@@ -1466,14 +1895,6 @@ export default function App() {
                     )}
                   </button>
 
-                  <button
-                    onClick={() => setDoodlesEnabled(!doodlesEnabled)}
-                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-100 dark:hover:bg-zinc-800 text-xs font-display font-bold transition-colors"
-                    title="Toggle Animated Pharmacy Doodles"
-                  >
-                    <Wand2 className={`w-3.5 h-3.5 ${theme.textClass}`} />
-                    <span>{doodlesEnabled ? 'Doodles ON' : 'Minimal'}</span>
-                  </button>
                 </div>
               </>
             ) : (
@@ -1485,13 +1906,13 @@ export default function App() {
                 >
                   {darkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
                 </button>
-                <button
+                {isAdmin && <button
                   onClick={openNewDrugModal}
                   className={`p-2.5 rounded-xl ${theme.btnClass}`}
                   title="Add New Drug SKU (N)"
                 >
                   <Plus className="w-4 h-4" />
-                </button>
+                </button>}
               </div>
             )}
           </div>
@@ -1543,22 +1964,22 @@ export default function App() {
                 </kbd>
               </button>
 
-              <button
+              {isAdmin && <button
                 onClick={openNewDrugModal}
                 className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800 text-xs font-display font-bold transition-colors shadow-2xs"
               >
                 <PackagePlus className={`w-4 h-4 ${theme.textClass}`} />
                 <span className="hidden sm:inline">Add Medication</span>
-              </button>
+              </button>}
 
-              <button
+              {isAdmin && <button
                 onClick={() => setIsImportModalOpen(true)}
                 className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:bg-slate-50 dark:hover:bg-zinc-800 text-xs font-display font-bold transition-colors shadow-2xs"
                 title="Import Inventory Additions from Excel (.xlsx, .xls) or .csv (Hotkey: I)"
               >
                 <FileSpreadsheet className={`w-4 h-4 ${theme.textClass}`} />
                 <span className="hidden sm:inline">Import Excel / CSV</span>
-              </button>
+              </button>}
 
               <button
                 onClick={() => {
@@ -1573,6 +1994,13 @@ export default function App() {
                   {cart.reduce((a, b) => a + b.qty, 0)}
                 </span>
               </button>
+              <button
+                onClick={handleSignOut}
+                className="hidden sm:inline-flex px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-800 text-xs font-display font-bold"
+                title={`Sign out ${currentUser.name}`}
+              >
+                {currentUser.role === 'admin' ? 'Admin' : currentUser.name}
+              </button>
             </div>
           </header>
 
@@ -1583,6 +2011,36 @@ export default function App() {
               <button onClick={() => setToast(null)} className="opacity-60 hover:opacity-100 p-0.5">
                 <X className="w-4 h-4" />
               </button>
+            </div>
+          )}
+
+          {generatedStaffPin && (
+            <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4">
+              <div className="w-full max-w-sm bg-white dark:bg-[#121216] rounded-3xl p-6 shadow-2xl border border-slate-200 dark:border-zinc-800">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h2 className="font-display text-xl font-bold">Staff PIN generated</h2>
+                    <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">
+                      Share this PIN securely with {generatedStaffPin.name}. It will not be shown again.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setGeneratedStaffPin(null)}
+                    className="min-h-10 min-w-10 inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-zinc-700"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+                <div className={`mt-6 text-center rounded-2xl py-5 font-mono-code text-4xl font-bold tracking-[0.35em] ${theme.badgeClass}`}>
+                  {generatedStaffPin.pin}
+                </div>
+                <button
+                  onClick={() => setGeneratedStaffPin(null)}
+                  className={`w-full mt-5 py-3 rounded-2xl font-display font-bold ${theme.btnClass}`}
+                >
+                  I have saved the PIN
+                </button>
+              </div>
             </div>
           )}
 
@@ -1597,8 +2055,7 @@ export default function App() {
                   theme={theme}
                   kpiStats={kpiStats}
                   salesHistory={salesHistory}
-                  doodlesEnabled={doodlesEnabled}
-                  setDoodlesEnabled={setDoodlesEnabled}
+                  doodlesEnabled={false}
                   onQuickFilterClick={(query) => {
                     setActivePage('pos');
                     setPosSubTab('terminal');
@@ -1618,7 +2075,7 @@ export default function App() {
                 <section className="space-y-3">
                   <div className="flex items-center justify-between">
                     <h2 className="font-display text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
-                      1. A&amp;O Pharmaceutical Telemetry
+                      Today&apos;s pharmacy overview
                     </h2>
                     <span className="text-xs text-slate-500 dark:text-zinc-400">
                       12 Reorganized Clinical Categories • Live Naira Valuation
@@ -1648,9 +2105,6 @@ export default function App() {
                           units in stock across 12 categories
                         </p>
                       </div>
-                      <div className={`p-3 rounded-2xl border shrink-0 ${theme.badgeClass}`}>
-                        <KpiDoodleIllustration type="catalog" className="w-12 h-12" />
-                      </div>
                     </div>
 
                     <div
@@ -1674,9 +2128,6 @@ export default function App() {
                           </span>
                         </p>
                       </div>
-                      <div className={`p-3 rounded-2xl border shrink-0 ${theme.badgeClass}`}>
-                        <KpiDoodleIllustration type="valuation" className="w-12 h-12" />
-                      </div>
                     </div>
 
                     <div
@@ -1698,9 +2149,6 @@ export default function App() {
                           {kpiStats.outOfStockCount} Out of Stock • {kpiStats.lowStockCount} Low Par
                         </p>
                       </div>
-                      <div className={`p-3 rounded-2xl border shrink-0 ${theme.badgeClass}`}>
-                        <KpiDoodleIllustration type="reorder" className="w-12 h-12" />
-                      </div>
                     </div>
 
                     <div
@@ -1719,14 +2167,11 @@ export default function App() {
                           {kpiStats.expiringSoonCount} Expiring &le;60d • {kpiStats.expiredCount} Expired
                         </p>
                       </div>
-                      <div className={`p-3 rounded-2xl border shrink-0 ${theme.badgeClass}`}>
-                        <KpiDoodleIllustration type="expiry" className="w-12 h-12" />
-                      </div>
                     </div>
                   </div>
                 </section>
 
-                {/* Hotkeys & Fast-Action Launcher */}
+                {false && (
                 <section className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1810,6 +2255,7 @@ export default function App() {
                     ))}
                   </div>
                 </section>
+                )}
 
                 {}
                 {/* Warnings & Pharmacist Shift Reminders Split */}
@@ -1821,7 +2267,7 @@ export default function App() {
                         <AlertTriangle className={`w-5 h-5 ${theme.textClass}`} />
                         <div>
                           <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                            3. Active Inventory Warnings &amp; Critical Alerts
+                            Inventory alerts
                           </h3>
                           <p className="text-xs text-slate-500 dark:text-zinc-400">
                             Items requiring immediate pharmacist quarantine or reorder
@@ -1917,7 +2363,7 @@ export default function App() {
                         <Bell className={`w-5 h-5 ${theme.textClass}`} />
                         <div>
                           <h3 className="font-display font-bold text-base text-slate-900 dark:text-white">
-                            4. Pharmacist Shift Reminders
+                            Shift reminders
                           </h3>
                           <p className="text-xs text-slate-500 dark:text-zinc-400">
                             Daily clinical tasks, cold-chain logs &amp; follow-ups
@@ -2032,7 +2478,7 @@ export default function App() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2.5">
-                      {selectedDrugIds.length > 0 && (
+                      {isAdmin && selectedDrugIds.length > 0 && (
                         <button
                           onClick={handleDeleteSelectedDrugs}
                           className="px-3.5 py-2 rounded-2xl border border-slate-900 dark:border-white bg-slate-900 text-white dark:bg-white dark:text-slate-950 text-xs font-display font-bold flex items-center gap-1.5"
@@ -2042,21 +2488,21 @@ export default function App() {
                         </button>
                       )}
 
-                      <button
+                      {isAdmin && <button
                         onClick={openNewDrugModal}
                         className={`px-4 py-2 rounded-2xl text-xs font-display font-bold flex items-center gap-1.5 shadow-2xs ${theme.btnClass}`}
                       >
                         <Plus className="w-4 h-4" />
                         <span>Add New Medication</span>
-                      </button>
+                      </button>}
 
-                      <button
+                      {isAdmin && <button
                         onClick={() => setIsImportModalOpen(true)}
                         className="px-4 py-2 rounded-2xl border border-slate-900 dark:border-zinc-200 bg-slate-900 text-white dark:bg-white dark:text-slate-950 text-xs font-display font-bold flex items-center gap-1.5 shadow-2xs transition-all hover:opacity-90"
                       >
                         <Upload className="w-3.5 h-3.5" />
                         <span>Import Excel / CSV</span>
-                      </button>
+                      </button>}
 
                       <div className="flex items-center bg-slate-100 dark:bg-zinc-900 p-1 rounded-2xl border border-slate-200 dark:border-zinc-800">
                         <button
@@ -2083,21 +2529,21 @@ export default function App() {
                         </button>
                       </div>
 
-                      <button
+                      {isAdmin && <button
                         onClick={handleBulkRestockLow}
                         className="px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-zinc-800 hover:border-slate-400 text-xs font-display font-bold flex items-center gap-1.5 bg-white dark:bg-zinc-900 transition-colors"
                       >
                         <RefreshCw className="w-3.5 h-3.5" />
                         <span>Restock Low ({kpiStats.lowStockCount + kpiStats.outOfStockCount})</span>
-                      </button>
+                      </button>}
 
-                      <button
+                      {isAdmin && <button
                         onClick={handleExportCSV}
                         className="px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-zinc-800 hover:border-slate-400 text-xs font-display font-bold flex items-center gap-1.5 bg-white dark:bg-zinc-900 transition-colors"
                       >
                         <Download className="w-3.5 h-3.5" />
                         <span>CSV</span>
-                      </button>
+                      </button>}
                     </div>
                   </div>
 
@@ -2633,6 +3079,120 @@ export default function App() {
                       <span>Next</span>
                       <ChevronRight className="w-3.5 h-3.5" />
                     </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {activePage === 'sales' && (
+              <div className="space-y-6">
+                <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
+                  <div>
+                    <h2 className="font-display text-2xl font-bold text-slate-900 dark:text-white">Sales &amp; invoices</h2>
+                    <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">
+                      Read-only transaction history for the selected period.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {[
+                      ['today', 'Today'],
+                      ['yesterday', 'Yesterday'],
+                      ['7d', 'Last 7 days'],
+                      ['30d', 'Last 30 days'],
+                      ['custom', 'Custom range']
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        onClick={() => setSalesPeriod(value)}
+                        className={`px-3 py-2 rounded-xl text-xs font-display font-bold ${
+                          salesPeriod === value ? theme.btnClass : 'border border-slate-200 dark:border-zinc-800 text-slate-600 dark:text-zinc-400'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {salesPeriod === 'custom' && (
+                  <div className="flex flex-wrap items-end gap-3">
+                    <label className="text-xs font-semibold text-slate-500">
+                      From
+                      <input
+                        type="datetime-local"
+                        value={salesStartDate}
+                        onChange={(e) => setSalesStartDate(e.target.value)}
+                        className="block mt-1 px-3 py-2 text-base sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+                      />
+                    </label>
+                    <label className="text-xs font-semibold text-slate-500">
+                      To
+                      <input
+                        type="datetime-local"
+                        value={salesEndDate}
+                        onChange={(e) => setSalesEndDate(e.target.value)}
+                        className="block mt-1 px-3 py-2 text-base sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900"
+                      />
+                    </label>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {[
+                    ['Gross sales', salesReportSummary.grossSales],
+                    ['Discounts', salesReportSummary.discounts],
+                    ['Net sales', salesReportSummary.netSales],
+                    ['Transactions', salesReportSummary.transactionCount],
+                    ['Items sold', salesReportSummary.itemsSold]
+                  ].map(([label, value]) => (
+                    <div key={label} className="bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-2xl p-4">
+                      <div className="text-xs text-slate-500 dark:text-zinc-400">{label}</div>
+                      <div className={`mt-1 font-serif-editorial text-xl font-bold ${typeof value === 'number' && label !== 'Transactions' && label !== 'Items sold' ? theme.textClass : 'text-slate-900 dark:text-white'}`}>
+                        {typeof value === 'number' && !['Transactions', 'Items sold'].includes(label) ? formatNaira(value) : value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs">
+                  <div className="overflow-x-auto">
+                    <table className="min-w-[980px] w-full text-left text-xs">
+                      <thead className="bg-slate-50 dark:bg-zinc-900/70 border-b border-slate-200 dark:border-zinc-800">
+                        <tr>
+                          {['Invoice', 'Date & time', 'Items', 'Payment', 'Subtotal / discount / total', 'Status', 'Cashier', 'Actions'].map((heading) => (
+                            <th key={heading} className="px-4 py-3 font-display font-bold text-slate-500 dark:text-zinc-400">{heading}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-zinc-800">
+                        {filteredSales.map((sale) => (
+                          <tr key={sale.id} className={sale.status === 'VOIDED' ? 'opacity-55' : ''}>
+                            <td className="px-4 py-4 font-mono-code font-bold">{sale.id}</td>
+                            <td className="px-4 py-4 font-mono-code text-slate-500">{sale.timestamp}</td>
+                            <td className="px-4 py-4">{sale.itemsCount}</td>
+                            <td className="px-4 py-4">{sale.paymentMethod}</td>
+                            <td className="px-4 py-4 font-mono-code">
+                              {formatNaira(sale.subtotal)} / {formatNaira(sale.discountAmount)} / <strong>{formatNaira(sale.total)}</strong>
+                            </td>
+                            <td className="px-4 py-4">
+                              <span className={`px-2 py-1 rounded-lg font-mono-code font-bold ${sale.status === 'VOIDED' ? 'bg-slate-200 dark:bg-zinc-800' : theme.badgeClass}`}>{sale.status}</span>
+                            </td>
+                            <td className="px-4 py-4">{sale.cashier || 'Unassigned'}</td>
+                            <td className="px-4 py-4">
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => setLastReceipt(sale)} className={`px-3 py-1.5 rounded-xl font-display font-bold ${theme.btnClass}`}>View</button>
+                                {isAdmin && sale.status !== 'VOIDED' && (
+                                  <button onClick={() => handleVoidInvoice(sale.id)} className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 font-display font-bold">Void</button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                        {filteredSales.length === 0 && (
+                          <tr><td colSpan="8" className="px-4 py-12 text-center text-slate-500">No sales found for this period.</td></tr>
+                        )}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
@@ -3444,7 +4004,7 @@ export default function App() {
             {/* =================================================================
                 PAGE 5.5: MULTI-FILE PROJECT EXPLORER & DOWNLOADER (`codebase`)
                ================================================================= */}
-            {activePage === 'codebase' && (
+            {false && activePage === 'codebase' && (
               <div className="space-y-6">
                 <div className="bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-2xs">
                   <div className="space-y-1">
@@ -3667,41 +4227,110 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Modular Multi-File Architecture */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  {ARCHITECTURE_FILES.map((file) => (
-                    <div
-                      key={file.path}
-                      className="bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs"
-                    >
-                      <div className="px-5 py-3.5 border-b border-slate-200/80 dark:border-zinc-800 flex items-center justify-between bg-slate-50/60 dark:bg-zinc-900/50">
-                        <span className={`px-2.5 py-0.5 rounded-lg font-mono-code text-xs font-bold border ${theme.badgeClass}`}>
-                          {file.path}
-                        </span>
-                        <button
-                          onClick={() => {
-                            navigator.clipboard?.writeText(file.code);
-                            showToast(`Copied ${file.path} to clipboard.`);
-                          }}
-                          className="px-2.5 py-1 rounded-lg border border-slate-200 dark:border-zinc-700 text-xs font-display font-bold flex items-center gap-1"
-                        >
-                          <Copy className="w-3 h-3" />
-                          <span>Copy</span>
-                        </button>
-                      </div>
-                      <div className="p-5 space-y-2.5">
-                        <div className="font-display font-bold text-sm text-slate-900 dark:text-white">
-                          {file.role}
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-zinc-400 leading-relaxed">
-                          {file.summary}
-                        </p>
-                        <pre className="p-3.5 rounded-2xl bg-slate-950 text-slate-100 font-mono-code text-[11px] overflow-x-auto leading-relaxed">
-                          {file.code}
-                        </pre>
-                      </div>
+              </div>
+            )}
+
+            {activePage === 'staff' && isAdmin && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="font-display text-2xl font-bold text-slate-900 dark:text-white">Staff access</h2>
+                  <p className="text-sm text-slate-500 dark:text-zinc-400 mt-1">
+                    Create and manage the people who use PharmaCore. PINs are shown only once when generated.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                  <form
+                    onSubmit={handleCreateStaff}
+                    className="bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl p-6 space-y-4 shadow-2xs"
+                  >
+                    <h3 className="font-display text-lg font-bold">Add staff member</h3>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1.5">Full name</label>
+                      <input
+                        value={staffForm.fullName}
+                        onChange={(e) => setStaffForm({ ...staffForm, fullName: e.target.value })}
+                        className="w-full px-3.5 py-2.5 text-base sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent"
+                        placeholder="Name of staff logged in"
+                      />
                     </div>
-                  ))}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1.5">Phone</label>
+                      <input
+                        value={staffForm.phone}
+                        onChange={(e) => setStaffForm({ ...staffForm, phone: e.target.value })}
+                        className="w-full px-3.5 py-2.5 text-base sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1.5">Email</label>
+                      <input
+                        type="email"
+                        value={staffForm.email}
+                        onChange={(e) => setStaffForm({ ...staffForm, email: e.target.value })}
+                        className="w-full px-3.5 py-2.5 text-base sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1.5">Role</label>
+                      <select
+                        value={staffForm.role}
+                        onChange={(e) => setStaffForm({ ...staffForm, role: e.target.value })}
+                        className="w-full px-3.5 py-2.5 text-base sm:text-sm rounded-xl border border-slate-200 dark:border-zinc-800 bg-transparent"
+                      >
+                        <option value="salesperson">Salesperson</option>
+                        <option value="employee">Employee</option>
+                        <option value="pharmacist">Pharmacist</option>
+                      </select>
+                    </div>
+                    <button type="submit" className={`w-full py-3 rounded-2xl font-display font-bold ${theme.btnClass}`}>
+                      Generate 4-digit PIN
+                    </button>
+                  </form>
+
+                  <div className="xl:col-span-2 bg-white dark:bg-[#121216] border border-slate-200/90 dark:border-zinc-800/90 rounded-3xl overflow-hidden shadow-2xs">
+                    <div className="p-5 border-b border-slate-200/80 dark:border-zinc-800">
+                      <h3 className="font-display text-lg font-bold">Team accounts</h3>
+                    </div>
+                    <div className="divide-y divide-slate-100 dark:divide-zinc-800">
+                      {staffMembers.map((member) => (
+                        <div key={member.id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-display font-bold text-slate-900 dark:text-white">{member.fullName}</span>
+                              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-mono-code font-bold ${theme.badgeClass}`}>
+                                {member.role}
+                              </span>
+                              <span className={`px-2 py-0.5 rounded-lg text-[10px] font-mono-code font-bold ${
+                                member.status === 'active' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-zinc-800'
+                              }`}>
+                                {member.status}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-zinc-400 mt-1">
+                              {member.email || 'No email'} {member.phone ? `• ${member.phone}` : ''}
+                            </p>
+                          </div>
+                          {member.role !== 'admin' && (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={() => handleResetStaffPin(member.id)}
+                                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-display font-bold"
+                              >
+                                Reset PIN
+                              </button>
+                              <button
+                                onClick={() => handleToggleStaffStatus(member.id)}
+                                className="px-3 py-2 rounded-xl border border-slate-200 dark:border-zinc-700 text-xs font-display font-bold"
+                              >
+                                {member.status === 'active' ? 'Deactivate' : 'Activate'}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -3732,21 +4361,16 @@ export default function App() {
                 { id: 'home', label: 'Home', icon: HomeIcon },
                 { id: 'inventory', label: 'Inventory', icon: Boxes },
                 { id: 'pos', label: 'Sales', icon: ShoppingCart },
-                { id: 'invoices', label: 'Invoices', icon: Receipt }
+                { id: 'sales', label: 'Invoices', icon: Receipt }
               ].map((tab) => {
                 const Icon = tab.icon;
-                const isActive = tab.id === 'invoices' ? activePage === 'pos' && posSubTab === 'invoices' : activePage === tab.id && (tab.id !== 'pos' || posSubTab === 'terminal');
+                const isActive = activePage === tab.id && (tab.id !== 'pos' || posSubTab === 'terminal');
                 return (
                   <button
                     key={tab.id}
                     onClick={() => {
-                      if (tab.id === 'invoices') {
-                        setActivePage('pos');
-                        setPosSubTab('invoices');
-                      } else {
-                        setActivePage(tab.id);
-                        if (tab.id === 'pos') setPosSubTab('terminal');
-                      }
+                      setActivePage(tab.id);
+                      if (tab.id === 'pos') setPosSubTab('terminal');
                     }}
                     className={`min-h-[44px] py-2 flex flex-col items-center justify-center gap-0.5 text-[10px] font-display font-bold ${
                       isActive ? theme.textClass : 'text-slate-500 dark:text-zinc-400'
