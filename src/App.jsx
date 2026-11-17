@@ -39,6 +39,11 @@ export default function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginMode, setLoginMode] = useState('staff');
+  const [adminUnlocked, setAdminUnlocked] = useState(() => sessionStorage.getItem('pharmacore-admin-unlocked') === 'true');
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
   const [authUserId, setAuthUserId] = useState(null);
   const [loginName, setLoginName] = useState('Dispensing Staff');
   const [loginPin, setLoginPin] = useState('');
@@ -315,6 +320,12 @@ export default function App() {
       setToast((prev) => (prev?.message === message ? null : prev));
     }, 3400);
   }, []);
+  const isAdmin = currentUser?.role === 'admin';
+  const requireAdmin = useCallback((action) => {
+    if (isAdmin) return true;
+    showToast(`Administrator access is required to ${action}.`, 'error');
+    return false;
+  }, [isAdmin, showToast]);
 
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
@@ -362,11 +373,15 @@ export default function App() {
         organizationId: data.organization_id,
         branchId: data.branch_id
       });
+      if (data.role === 'admin') {
+        setAdminUnlocked(sessionStorage.getItem('pharmacore-admin-unlocked') === 'true');
+      }
       setAuthLoading(false);
     };
 
     supabase.auth.getSession().then(({ data: { session } }) => loadSessionProfile(session));
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') setIsPasswordRecovery(true);
       setTimeout(() => loadSessionProfile(session), 0);
     });
 
@@ -407,16 +422,24 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [currentUser, showToast]);
+  }, [requireAdmin]);
+
+  const openEditDrugModal = useCallback((drug) => {
+    if (!requireAdmin('edit inventory')) return;
+    setIsAddingNew(false);
+    setEditingDrug(drug);
+  }, [requireAdmin]);
+
+  const requestDeleteDrug = useCallback((drug) => {
+    if (!requireAdmin('delete inventory')) return;
+    setDrugToDelete(drug);
+  }, [requireAdmin]);
 
   const posSearchInputRef = useRef(null);
   const invSearchInputRef = useRef(null);
 
   const openNewDrugModal = useCallback(() => {
-    if (currentUser?.role !== 'admin') {
-      showToast('Inventory changes are restricted to administrators.', 'error');
-      return;
-    }
+    if (!requireAdmin('add medication')) return;
     setIsAddingNew(true);
     setEditingDrug({
       id: `sku-${Date.now()}`,
@@ -1067,6 +1090,7 @@ export default function App() {
   };
 
   const handleVoidInvoice = (invoiceId) => {
+    if (!requireAdmin('void invoices')) return;
     const target = salesHistory.find((inv) => inv.id === invoiceId);
     if (!target || target.status === 'VOIDED') return;
 
@@ -1091,12 +1115,12 @@ export default function App() {
   };
 
   const adjustStock = (drugId, delta) => {
-    if (!isAdmin) return;
+    if (!requireAdmin('adjust stock')) return;
     setCatalog((prev) => updateStock(prev, drugId, delta));
   };
 
   const handleConfirmDeleteDrug = () => {
-    if (!isAdmin) return;
+    if (!requireAdmin('delete inventory')) return;
     if (!drugToDelete) return;
     setCatalog((prev) => prev.filter((item) => item.id !== drugToDelete.id));
     setCart((prev) => prev.filter((line) => line.drug.id !== drugToDelete.id));
@@ -1106,7 +1130,7 @@ export default function App() {
   };
 
   const handleDeleteSelectedDrugs = () => {
-    if (!isAdmin) return;
+    if (!requireAdmin('delete inventory')) return;
     if (selectedDrugIds.length === 0) return;
     const setIds = new Set(selectedDrugIds);
     setCatalog((prev) => prev.filter((item) => !setIds.has(item.id)));
@@ -1116,7 +1140,7 @@ export default function App() {
   };
 
   const handleQuarantineExpiredBatches = () => {
-    if (!isAdmin) return;
+    if (!requireAdmin('quarantine expired stock')) return;
     const expiredItems = catalog.filter((i) => i.daysUntilExpiry <= 0 && i.stockQty > 0);
     if (expiredItems.length === 0) {
       showToast('All expired batches are already quarantined at 0 stock.', 'info');
@@ -1128,7 +1152,7 @@ export default function App() {
 
   const handleSaveDrug = (e) => {
     e.preventDefault();
-    if (!isAdmin) return;
+    if (!requireAdmin(isAddingNew ? 'add medication' : 'edit inventory')) return;
     if (!editingDrug) return;
 
     const today = new Date('2026-10-15T12:00:00Z');
@@ -1159,7 +1183,7 @@ export default function App() {
   };
 
   const handleBulkRestockLow = () => {
-    if (!isAdmin) return;
+    if (!requireAdmin('restock inventory')) return;
     let restockedCount = 0;
     setCatalog((prev) =>
       prev.map((item) => {
@@ -1174,7 +1198,7 @@ export default function App() {
   };
 
   const handleGeneratePurchaseOrder = () => {
-    if (!isAdmin) return;
+    if (!requireAdmin('create purchase orders')) return;
     const lowItems = catalog.filter((i) => i.stockQty <= i.reorderLevel);
     const estCost = lowItems.slice(0, 25).reduce((acc, i) => acc + i.costPrice * 30, 0);
     const newPo = {
@@ -1192,7 +1216,7 @@ export default function App() {
   };
 
   const handleReceivePurchaseOrder = (poId) => {
-    if (!isAdmin) return;
+    if (!requireAdmin('receive purchase orders')) return;
     setPurchaseOrders((prev) =>
       prev.map((po) => (po.id === poId ? { ...po, status: 'RECEIVED' } : po))
     );
@@ -1272,7 +1296,6 @@ export default function App() {
     }
   };
 
-  const isAdmin = currentUser?.role === 'admin';
   const NAV_ITEMS = [
     {
       id: 'home',
@@ -1352,7 +1375,9 @@ export default function App() {
           body: { name: loginName.trim(), pin: loginPin }
         });
         if (error || !data?.tokenHash) {
-          setAuthError(error?.message || data?.error || 'Invalid staff name or PIN.');
+          const message = error?.message || data?.error || 'Invalid staff name or PIN.';
+          setAuthError(message);
+          showToast(message, 'error');
           setAuthLoading(false);
           return;
         }
@@ -1362,6 +1387,7 @@ export default function App() {
         });
         if (verifyError) {
           setAuthError(verifyError.message);
+          showToast(`Staff sign-in failed: ${verifyError.message}`, 'error');
           setAuthLoading(false);
         }
         return;
@@ -1372,23 +1398,18 @@ export default function App() {
       });
       if (error) {
         setAuthError(error.message);
+        showToast(`Administrator sign-in failed: ${error.message}`, 'error');
         setAuthLoading(false);
+      } else {
+        sessionStorage.setItem('pharmacore-admin-unlocked', 'true');
+        setAdminUnlocked(true);
       }
       return;
     }
 
-    const role = 'employee';
-    const name = role === 'admin' ? 'Pharmacy Administrator' : loginName.trim() || 'Dispensing Staff';
-    const member = staffMembers.find(
-      (staff) => staff.fullName.toLowerCase() === name.toLowerCase() && staff.role !== 'admin'
-    );
-    if (role !== 'admin' && (!member || member.status !== 'active' || member.pin !== loginPin)) {
-      showToast('Invalid staff name or 4-digit PIN.', 'error');
-      return;
-    }
-    setCurrentUser({ role: role === 'admin' ? 'admin' : member.role, name });
-    setActivePage(role === 'admin' ? 'home' : 'pos');
-    setPosSubTab('terminal');
+    const message = 'Secure authentication is not configured. Set the Supabase environment variables before signing in.';
+    setAuthError(message);
+    showToast(message, 'error');
   };
 
   const handleSignOut = async () => {
@@ -1401,6 +1422,72 @@ export default function App() {
     }
     setCurrentUser(null);
     setAuthUserId(null);
+    setAdminUnlocked(false);
+    sessionStorage.removeItem('pharmacore-admin-unlocked');
+    setShowAccountMenu(false);
+  };
+
+  const unlockAdminWorkspace = async (event) => {
+    event.preventDefault();
+    setAuthError('');
+    const { error } = await supabase.auth.signInWithPassword({
+      email: currentUser.email,
+      password: loginPassword
+    });
+    if (error) {
+      setAuthError(error.message);
+      showToast(`Admin unlock failed: ${error.message}`, 'error');
+      return;
+    }
+    sessionStorage.setItem('pharmacore-admin-unlocked', 'true');
+    setAdminUnlocked(true);
+    setLoginPassword('');
+  };
+
+  const lockAdminWorkspace = async () => {
+    sessionStorage.removeItem('pharmacore-admin-unlocked');
+    setAdminUnlocked(false);
+    setShowAccountMenu(false);
+    if (supabase) await supabase.auth.signOut();
+    setCurrentUser(null);
+    setAuthUserId(null);
+    showToast('Admin workspace locked.', 'info');
+  };
+
+  const sendPasswordResetEmail = async () => {
+    const { error } = await supabase.auth.resetPasswordForEmail(currentUser.email, {
+      redirectTo: window.location.origin
+    });
+    if (error) {
+      showToast(`Could not send password reset email: ${error.message}`, 'error');
+      return;
+    }
+    setShowAccountMenu(false);
+    showToast('Password reset instructions sent to the administrator email.', 'success');
+  };
+
+  const handlePasswordUpdate = async (event) => {
+    event.preventDefault();
+    if (newPassword.length < 8) {
+      setAuthError('Use at least 8 characters for the new password.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setAuthError('The passwords do not match.');
+      return;
+    }
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) {
+      setAuthError(error.message);
+      return;
+    }
+    setIsPasswordRecovery(false);
+    setNewPassword('');
+    setConfirmNewPassword('');
+    setAuthError('');
+    sessionStorage.setItem('pharmacore-admin-unlocked', 'true');
+    setAdminUnlocked(true);
+    showToast('Administrator password updated successfully.', 'success');
   };
 
   const invokeStaffAction = async (payload) => {
@@ -1523,6 +1610,42 @@ export default function App() {
     );
   }
 
+  if (isPasswordRecovery && currentUser) {
+    return (
+      <div className="min-h-dvh bg-[#FAF9F5] dark:bg-[#09090B] text-slate-900 dark:text-slate-100 flex items-center justify-center p-5 font-sans-ui">
+        <form onSubmit={handlePasswordUpdate} className="w-full max-w-md bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 rounded-3xl p-7 sm:p-9 shadow-xl">
+          <h1 className="font-display text-2xl font-bold mb-2">Set a new admin password</h1>
+          <p className="text-sm text-slate-500 dark:text-zinc-400 mb-6">
+            Choose a new password for the administrator account.
+          </p>
+          <label className="block text-xs font-semibold text-slate-500 mb-1.5">New password</label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="w-full px-3.5 py-3 text-base rounded-2xl border border-slate-200 dark:border-zinc-800 bg-transparent mb-4"
+            autoComplete="new-password"
+            minLength={8}
+            autoFocus
+          />
+          <label className="block text-xs font-semibold text-slate-500 mb-1.5">Confirm new password</label>
+          <input
+            type="password"
+            value={confirmNewPassword}
+            onChange={(e) => setConfirmNewPassword(e.target.value)}
+            className="w-full px-3.5 py-3 text-base rounded-2xl border border-slate-200 dark:border-zinc-800 bg-transparent mb-4"
+            autoComplete="new-password"
+            minLength={8}
+          />
+          {authError && <p className="text-xs text-red-600 dark:text-red-400 mb-4">{authError}</p>}
+          <button type="submit" className={`w-full py-3 rounded-2xl font-display font-bold ${theme.btnClass}`}>
+            Save new password
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   if (!currentUser) {
     return (
       <div className="min-h-dvh bg-[#FAF9F5] dark:bg-[#09090B] text-slate-900 dark:text-slate-100 flex items-center justify-center p-5 font-sans-ui">
@@ -1607,22 +1730,50 @@ export default function App() {
             <button onClick={handleLogin} className={`w-full py-3 rounded-2xl font-display font-bold ${theme.btnClass}`}>
               Sign in
             </button>
-            {!isSupabaseConfigured && (
-              <button
-                onClick={() => {
-                  setCurrentUser({ role: 'admin', name: 'Pharmacy Administrator' });
-                  setActivePage('home');
-                }}
-                className="w-full py-3 rounded-2xl border border-slate-300 dark:border-zinc-700 font-display font-bold"
-              >
-                Enter Admin Workspace
-              </button>
-            )}
           </div>
           <p className="text-[11px] text-slate-400 mt-5">
-            {isSupabaseConfigured ? 'Protected by Supabase Auth and persistent browser sessions.' : 'Prototype access boundary — configure Supabase to enable real sessions.'}
+            {isSupabaseConfigured
+              ? 'Protected by Supabase Auth and persistent browser sessions.'
+              : 'Supabase authentication is required. Configure the app environment before use.'}
           </p>
         </div>
+      </div>
+    );
+  }
+
+  if (currentUser.role === 'admin' && !adminUnlocked) {
+    return (
+      <div className="min-h-dvh bg-[#FAF9F5] dark:bg-[#09090B] text-slate-900 dark:text-slate-100 flex items-center justify-center p-5 font-sans-ui">
+        <form onSubmit={unlockAdminWorkspace} className="w-full max-w-md bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 rounded-3xl p-7 sm:p-9 shadow-xl">
+          <div className="flex items-center gap-3 mb-8">
+            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${theme.btnClass}`}>
+              <span className="font-serif-editorial italic font-bold text-2xl">Rx</span>
+            </div>
+            <div>
+              <div className="font-display font-extrabold text-xl">Admin workspace locked</div>
+              <div className="text-xs text-slate-500 dark:text-zinc-400">{currentUser.email}</div>
+            </div>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-zinc-400 mb-5">
+            Enter the administrator password to continue. The workspace locks when you lock it or close the browser.
+          </p>
+          <label className="block text-xs font-semibold text-slate-500 mb-1.5">Administrator password</label>
+          <input
+            type="password"
+            value={loginPassword}
+            onChange={(e) => setLoginPassword(e.target.value)}
+            className="w-full px-3.5 py-3 text-base rounded-2xl border border-slate-200 dark:border-zinc-800 bg-transparent mb-4"
+            autoComplete="current-password"
+            autoFocus
+          />
+          {authError && <p className="text-xs text-red-600 dark:text-red-400 mb-4">{authError}</p>}
+          <button type="submit" className={`w-full py-3 rounded-2xl font-display font-bold ${theme.btnClass}`}>
+            Unlock Admin Workspace
+          </button>
+          <button type="button" onClick={handleSignOut} className="w-full mt-3 py-3 rounded-2xl border border-slate-300 dark:border-zinc-700 font-display font-bold">
+            Sign out
+          </button>
+        </form>
       </div>
     );
   }
@@ -1994,13 +2145,41 @@ export default function App() {
                   {cart.reduce((a, b) => a + b.qty, 0)}
                 </span>
               </button>
-              <button
-                onClick={handleSignOut}
-                className="hidden sm:inline-flex px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-800 text-xs font-display font-bold"
-                title={`Sign out ${currentUser.name}`}
-              >
-                {currentUser.role === 'admin' ? 'Admin' : currentUser.name}
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => setShowAccountMenu((open) => !open)}
+                  className="hidden sm:inline-flex px-3 py-2.5 rounded-2xl border border-slate-200 dark:border-zinc-800 text-xs font-display font-bold"
+                  title={`Account options for ${currentUser.name}`}
+                >
+                  {currentUser.role === 'admin' ? 'Admin' : currentUser.name}
+                </button>
+                {showAccountMenu && (
+                  <div className="absolute right-0 top-full mt-2 z-40 w-56 rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#121216] p-2 shadow-xl">
+                    {currentUser.role === 'admin' && (
+                      <>
+                        <button
+                          onClick={lockAdminWorkspace}
+                          className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-display font-bold hover:bg-slate-100 dark:hover:bg-zinc-800"
+                        >
+                          Lock Admin Workspace
+                        </button>
+                        <button
+                          onClick={sendPasswordResetEmail}
+                          className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-display font-bold hover:bg-slate-100 dark:hover:bg-zinc-800"
+                        >
+                          Change Admin Password
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full text-left px-3 py-2.5 rounded-xl text-xs font-display font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30"
+                    >
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
 
@@ -2340,10 +2519,7 @@ export default function App() {
                                   </button>
                                 ) : (
                                   <button
-                                    onClick={() => {
-                                      setEditingDrug(item);
-                                      setIsAddingNew(false);
-                                    }}
+                                    onClick={() => openEditDrugModal(item)}
                                     className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 font-display font-bold hover:border-slate-900 dark:hover:border-white"
                                   >
                                     Inspect Batch
@@ -2767,17 +2943,14 @@ export default function App() {
                                 Variants
                               </button>
                               <button
-                                onClick={() => {
-                                  setIsAddingNew(false);
-                                  setEditingDrug(item);
-                                }}
+                                onClick={() => openEditDrugModal(item)}
                                 className="p-2 min-h-10 min-w-10 md:min-h-0 md:min-w-0 inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:border-zinc-200 text-slate-600 dark:text-zinc-300"
                                 title="Edit Medication SKU"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
                               <button
-                                onClick={() => setDrugToDelete(item)}
+                                onClick={() => requestDeleteDrug(item)}
                                 className="p-2 min-h-10 min-w-10 md:min-h-0 md:min-w-0 inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:border-zinc-200 text-slate-500 hover:text-slate-900 dark:hover:text-white"
                                 title="Delete Medication SKU"
                               >
@@ -2991,17 +3164,14 @@ export default function App() {
                                       Variants
                                     </button>
                                     <button
-                                      onClick={() => {
-                                        setIsAddingNew(false);
-                                        setEditingDrug(item);
-                                      }}
+                                      onClick={() => openEditDrugModal(item)}
                                       className="p-1.5 min-h-10 min-w-10 md:min-h-0 md:min-w-0 inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:border-zinc-200"
                                       title="Edit"
                                     >
                                       <Edit3 className="w-3.5 h-3.5" />
                                     </button>
                                     <button
-                                      onClick={() => setDrugToDelete(item)}
+                                      onClick={() => requestDeleteDrug(item)}
                                       className="p-1.5 min-h-10 min-w-10 md:min-h-0 md:min-w-0 inline-flex items-center justify-center rounded-xl border border-slate-200 dark:border-zinc-700 hover:border-slate-900 dark:hover:text-white"
                                       title="Delete"
                                     >
@@ -3985,10 +4155,7 @@ export default function App() {
                               {formatNaira(item.sellingPrice)}
                             </span>
                             <button
-                              onClick={() => {
-                                setEditingDrug(item);
-                                setIsAddingNew(false);
-                              }}
+                              onClick={() => openEditDrugModal(item)}
                               className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-zinc-700 font-display font-bold"
                             >
                               Update Batch
