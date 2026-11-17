@@ -1649,7 +1649,7 @@ export default function App() {
   if (!currentUser) {
     return (
       <div className="min-h-dvh bg-[#FAF9F5] dark:bg-[#09090B] text-slate-900 dark:text-slate-100 flex items-center justify-center p-5 font-sans-ui">
-        <div className="w-full max-w-md bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 rounded-3xl p-7 sm:p-9 shadow-xl">
+        <form onSubmit={handleLogin} className="w-full max-w-md bg-white dark:bg-[#121216] border border-slate-200 dark:border-zinc-800 rounded-3xl p-7 sm:p-9 shadow-xl">
           <div className="flex items-center gap-3 mb-8">
             <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${theme.btnClass}`}>
               <span className="font-serif-editorial italic font-bold text-2xl">Rx</span>
@@ -1727,16 +1727,16 @@ export default function App() {
           )}
           {authError && <p className="text-xs text-red-600 dark:text-red-400 mb-4">{authError}</p>}
           <div className="grid gap-3">
-            <button onClick={handleLogin} className={`w-full py-3 rounded-2xl font-display font-bold ${theme.btnClass}`}>
+            <button type="submit" className={`w-full py-3 rounded-2xl font-display font-bold ${theme.btnClass}`}>
               Sign in
             </button>
           </div>
           <p className="text-[11px] text-slate-400 mt-5">
             {isSupabaseConfigured
-              ? 'Protected by Supabase Auth and persistent browser sessions.'
+              ? 'Protected by Supabase Auth until the browser closes or you sign out.'
               : 'Supabase authentication is required. Configure the app environment before use.'}
           </p>
-        </div>
+        </form>
       </div>
     );
   }
